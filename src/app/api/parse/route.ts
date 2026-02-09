@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { supabase } from '@/lib/supabase'
+import { supabase } from '../../../lib/supabase'
 import { nanoid } from 'nanoid'
 import * as cheerio from 'cheerio'  // ← Named!
 import axios from 'axios'
