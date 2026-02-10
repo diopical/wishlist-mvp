@@ -1,12 +1,11 @@
-'use client'
+import { auth } from '@clerk/nextjs/server'
 
-import { UserButton, SignedIn, SignedOut, RedirectToSignIn, useUser } from '@clerk/nextjs'
-
-export default function Dashboard() {
-  const { isLoaded, isSignedIn } = useUser()
-
-  if (!isLoaded) return <div>Загрузка...</div>
-  if (!isSignedIn) return <RedirectToSignIn />
+export default async function Dashboard() {
+  const { userId } =await auth()
+  
+  if (!userId) {
+    return <div>Не авторизован</div>
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-8">
@@ -15,7 +14,7 @@ export default function Dashboard() {
           <h1 className="text-4xl font-bold bg-gradient-to-r from-gray-800 to-gray-600 bg-clip-text text-transparent">
             Мои списки желаний
           </h1>
-          <UserButton />
+          <div>Профиль</div>
         </div>
         
         <div className="grid gap-6">
