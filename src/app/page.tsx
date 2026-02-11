@@ -18,6 +18,7 @@ export default function Home() {
 
     const checkSession = async () => {
       try {
+        if (!supabaseClient) return
         const { data, error } = await supabaseClient.auth.getSession()
         if (data?.session) {
           console.log('✅ Active session found, going to dashboard')
@@ -32,20 +33,21 @@ export default function Home() {
     checkSession()
 
     // Only listen for sign-in events, not initial state
-    const { data: authListener } = supabaseClient.auth.onAuthStateChange((event, session) => {
-      console.log('🏠 Auth event:', event, { hasSession: !!session })
-      
-      if (event === 'SIGNED_IN' && session) {
-        console.log('✅ User just signed in, redirecting...')
-        setHasSession(true)
-        setTimeout(() => {
-          window.location.href = '/dashboard'
-        }, 500)
-      }
-    })
-    
+    if (supabaseClient) {
+      const { data: authListener } = supabaseClient.auth.onAuthStateChange((event, session) => {
+        console.log('🏠 Auth event:', event, { hasSession: !!session })
+        
+        if (event === 'SIGNED_IN' && session) {
+          console.log('✅ User just signed in, redirecting...')
+          setHasSession(true)
+          setTimeout(() => {
+            window.location.href = '/dashboard'
+          }, 500)
+        }
+      })
 
-    unsubscribe = authListener.subscription.unsubscribe
+      unsubscribe = authListener.subscription.unsubscribe
+    }
 
     return () => {
       if (unsubscribe) unsubscribe()
@@ -81,7 +83,7 @@ export default function Home() {
         </button>
         <button 
           onClick={async () => {
-            await supabaseClient.auth.signOut()
+            try { if (supabaseClient) await supabaseClient.auth.signOut() } catch (e) {}
             window.location.href = '/'
           }}
           className="mt-4 bg-gray-500 hover:bg-gray-600 text-white py-2 px-4 rounded-lg font-semibold"
@@ -103,6 +105,7 @@ export default function Home() {
     setMessage('')
     
     try {
+      if (!supabaseClient) throw new Error('Supabase client not initialized')
       const { error } = await supabaseClient.auth.signInWithOtp({
         email,
         options: { 
@@ -127,6 +130,7 @@ export default function Home() {
 
   const handleGoogleSignIn = async () => {
     try {
+      if (!supabaseClient) throw new Error('Supabase client not initialized')
       const { error } = await supabaseClient.auth.signInWithOAuth({
         provider: 'google',
         options: { redirectTo: `${window.location.origin}/auth/callback` },

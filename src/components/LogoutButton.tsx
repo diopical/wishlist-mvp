@@ -15,7 +15,7 @@ export default function LogoutButton() {
 
     try {
       // Ensure client-side session/local storage is cleared
-      await supabaseClient.auth.signOut()
+      if (supabaseClient) await supabaseClient.auth.signOut()
     } catch (e) {
       console.warn('Client signOut failed', e)
     }

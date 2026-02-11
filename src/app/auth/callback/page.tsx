@@ -16,6 +16,11 @@ export default function AuthCallbackPage() {
         const url = new URL(window.location.href)
         const code = url.searchParams.get('code')
 
+        if (!supabaseClient) {
+          setMessage('Missing Supabase client; cannot complete sign-in.')
+          return
+        }
+
         if (code) {
           // exchange code for session
           await supabaseClient.auth.exchangeCodeForSession(code)
