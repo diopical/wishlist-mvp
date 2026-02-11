@@ -4,8 +4,8 @@ import { parse } from 'cookie'
 
 export async function middleware(req: NextRequest) {
   const res = NextResponse.next()
-
-  const cookies = {
+  try {
+    const cookies = {
     // Provide the full adapter expected by `@supabase/ssr`:
     // - `get(name)` returns a single cookie or null
     // - `getAll()` returns an array of { name, value } with `value` always a string
@@ -50,19 +50,25 @@ export async function middleware(req: NextRequest) {
     },
   }
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { cookies }
-  )
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      { cookies }
+    )
 
-  try {
-    await supabase.auth.getSession()
+    try {
+      await supabase.auth.getSession()
+    } catch (err) {
+      console.error('Middleware supabase.getSession error', err)
+    }
+
+    return res
   } catch (err) {
-    console.error('Middleware supabase.getSession error', err)
+    // Catch any middleware runtime errors to avoid 500s from failing the
+    // entire request. Log the full error for diagnosis in Vercel logs.
+    console.error('Middleware error (caught):', err)
+    return res
   }
-
-  return res
 }
 
 export const config = {
