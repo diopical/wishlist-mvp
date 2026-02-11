@@ -1,5 +1,5 @@
-import { ClerkProvider } from '@clerk/nextjs'
 import './globals.css'
+import { cookies } from 'next/headers'
 
 export default function RootLayout({
   children,
@@ -7,10 +7,8 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <ClerkProvider>
-      <html lang="ru">
-        <body>{children}</body>
-      </html>
-    </ClerkProvider>
+    <html lang="ru">
+      <body>{children}</body>
+    </html>
   )
 }
