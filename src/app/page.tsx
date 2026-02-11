@@ -1,16 +1,16 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { useSearchParams } from 'next/navigation'
+// import { useSearchParams } from 'next/navigation'
 import { supabaseClient } from '@/lib/supabase-client'
 
 export default function Home() {
-  const searchParams = useSearchParams()
+  // read search params on client instead of using `useSearchParams`
   const [email, setEmail] = useState('')
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
   const [mounted, setMounted] = useState(false)
   const [hasSession, setHasSession] = useState(false)
-  const errorParam = searchParams.get('error')
+  const [errorParam, setErrorParam] = useState<string | null>(null)
 
   useEffect(() => {
     setMounted(true)
@@ -43,6 +43,7 @@ export default function Home() {
         }, 500)
       }
     })
+    
 
     unsubscribe = authListener.subscription.unsubscribe
 
@@ -50,6 +51,15 @@ export default function Home() {
       if (unsubscribe) unsubscribe()
     }
   }, [])
+
+  // Read URL search params on client without relying on next/navigation
+  useEffect(() => {
+    try {
+      const sp = new URLSearchParams(window.location.search)
+      const err = sp.get('error')
+      if (err) setErrorParam(err)
+    } catch (e) {}
+  }, [mounted])
 
   if (!mounted) {
     return null
