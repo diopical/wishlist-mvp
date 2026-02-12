@@ -6,12 +6,18 @@ import { supabaseClient } from '@/lib/supabase-client'
 export default function AuthCallbackPage() {
   const router = useRouter()
   const [message, setMessage] = useState('Checking sign-in...')
+  const [debugUrl, setDebugUrl] = useState('Loading...')
 
   useEffect(() => {
     let mounted = true
 
     async function handleCallback() {
       try {
+        // Set debug URL after component mounts (client-side only)
+        if (typeof window !== 'undefined') {
+          setDebugUrl(window.location.href)
+        }
+
         // If there is a `code` param (PKCE flow), exchange it server-side via the client
         const url = new URL(window.location.href)
         const code = url.searchParams.get('code')
@@ -90,7 +96,7 @@ export default function AuthCallbackPage() {
       <details className="text-left text-sm text-gray-500 mt-4">
         <summary className="cursor-pointer">Debug info</summary>
         <pre className="mt-2 p-2 bg-gray-100 rounded overflow-auto text-xs">
-          {typeof window !== 'undefined' ? window.location.href : 'Loading...'}
+          {debugUrl}
         </pre>
       </details>
     </div>
