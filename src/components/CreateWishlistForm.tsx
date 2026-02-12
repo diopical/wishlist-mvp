@@ -44,20 +44,34 @@ export default function CreateWishlistForm() {
   /**
    * Валидация Amazon URL
    * Проверяет, что URL содержит amazon.* или является валидным wishlist/product URL
+   * Также поддерживает короткие ссылки Amazon (a.co, amzn.to и т.д.)
    */
   const validateUrls = (urls: string[]): boolean => {
     if (!urls || urls.length === 0) return false
+    
+    // Список доменов-шортенеров Amazon
+    const shortDomains = ['a.co', 'amzn.to', 'amzn.eu', 'amzn.com', 'amzn.asia']
     
     // Проверяем каждый URL
     for (const url of urls) {
       try {
         const urlObj = new URL(url.trim())
-        // Проверяем, что это Amazon URL
-        if (!urlObj.hostname.includes('amazon.')) {
+        const hostname = urlObj.hostname
+        
+        // Проверяем, что это Amazon URL (обычный или короткий)
+        const isAmazonShort = shortDomains.some(domain => hostname.includes(domain))
+        const isAmazonFull = hostname.includes('amazon.')
+        
+        if (!isAmazonShort && !isAmazonFull) {
           return false
         }
         
-        // Проверяем, что это wishlist или product URL
+        // Если это короткая ссылка, она валидна (редирект разрешится на бэке)
+        if (isAmazonShort) {
+          continue
+        }
+        
+        // Для полных Amazon ссылок проверяем паттерны
         const isValid = urlObj.pathname.includes('/wishlist/') || 
                urlObj.pathname.includes('/dp/') ||
                urlObj.pathname.includes('/gp/product/')

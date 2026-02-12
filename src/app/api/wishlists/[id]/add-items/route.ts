@@ -2,6 +2,7 @@ import { createServerSupabase } from '@/lib/supabase-server'
 import { NextRequest, NextResponse } from 'next/server'
 import axios from 'axios'
 import * as cheerio from 'cheerio'
+import { resolveShortUrl } from '@/lib/resolve-short-url'
 
 const TAG = 'your-affiliate-tag-123'
 
@@ -69,7 +70,10 @@ export async function POST(
     // Обрабатываем каждый URL
     for (const url of urls) {
       try {
-        const { data: html } = await axios.get(url, {
+        // 🔗 Разрешаем короткие ссылки перед парсингом
+        const resolvedUrl = await resolveShortUrl(url)
+        
+        const { data: html } = await axios.get(resolvedUrl, {
           headers: {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
           },
@@ -85,7 +89,9 @@ export async function POST(
           .map((_, el) => {
             let href = $(el).attr('href') || $(el).attr('data-href')
             if (!href?.includes('http')) {
-              href = `https://www.amazon.ae${href || ''}`
+              // Получаем домен из разрешенного URL
+              const domain = resolvedUrl.includes('amazon.') ? new URL(resolvedUrl).hostname : 'amazon.ae'
+              href = `https://${domain}${href || ''}`
             }
             return href?.includes('/dp/') ? href : null
           })
@@ -94,9 +100,10 @@ export async function POST(
 
         // Fallback для страницы товара
         if (productUrls.length === 0) {
-          const asin = url.match(/dp\/([A-Z0-9]{10})/)?.[1]
+          const asin = resolvedUrl.match(/dp\/([A-Z0-9]{10})/)?.[1]
           if (asin) {
-            productUrls = [`${url.includes('amazon.') ? url : `https://www.amazon.ae/dp/${asin}`}`]
+            const domain = resolvedUrl.includes('amazon.') ? new URL(resolvedUrl).hostname : 'amazon.ae'
+            productUrls = [`https://${domain}/dp/${asin}`]
           }
         }
 

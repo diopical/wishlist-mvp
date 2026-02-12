@@ -4,62 +4,13 @@ import axios from 'axios'
 import * as cheerio from 'cheerio'
 import { createClient } from '@supabase/supabase-js'
 import { customAlphabet } from 'nanoid/non-secure'
+import { resolveShortUrl } from '@/lib/resolve-short-url'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 const supabase = createClient(supabaseUrl, supabaseKey)
 const nanoid = customAlphabet('0123456789abcdef', 8)
 const TAG = 'your-affiliate-tag-123'
-
-// 🔗 Функция для разрешения коротких ссылок Amazon
-async function resolveShortUrl(url: string): Promise<string> {
-  // Проверяем, является ли это короткой ссылкой Amazon
-  const shortDomains = ['a.co', 'amzn.to', 'amzn.eu', 'amzn.com', 'amzn.asia']
-  const isShortUrl = shortDomains.some(domain => url.includes(domain))
-  
-  if (!isShortUrl) {
-    return url // Обычная ссылка, возвращаем как есть
-  }
-  
-  console.log(`🔄 Разрешаем короткую ссылку: ${url}`)
-  
-  try {
-    // Делаем HEAD запрос и следуем редиректам
-    const response = await axios.head(url, {
-      maxRedirects: 5,
-      validateStatus: (status) => status >= 200 && status < 400,
-      headers: { 
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-      },
-      timeout: 10000
-    })
-    
-    // Получаем финальный URL после всех редиректов
-    const finalUrl = response.request?.res?.responseUrl || response.config?.url || url
-    console.log(`✅ Финальный URL: ${finalUrl}`)
-    return finalUrl
-  } catch (error: any) {
-    console.log(`⚠️ Ошибка разрешения короткой ссылки, пробуем GET: ${error.message}`)
-    
-    // Fallback: если HEAD не работает, пробуем GET
-    try {
-      const response = await axios.get(url, {
-        maxRedirects: 5,
-        validateStatus: (status) => status >= 200 && status < 400,
-        headers: { 
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        },
-        timeout: 10000
-      })
-      const finalUrl = response.request?.res?.responseUrl || response.config?.url || url
-      console.log(`✅ Финальный URL (через GET): ${finalUrl}`)
-      return finalUrl
-    } catch (getFallbackError) {
-      console.log(`❌ Не удалось разрешить короткую ссылку: ${url}`)
-      return url // Возвращаем исходную ссылку
-    }
-  }
-}
 
 export async function POST(req: NextRequest) {
   try {
