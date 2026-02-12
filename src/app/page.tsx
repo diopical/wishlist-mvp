@@ -114,7 +114,7 @@ export default function Home() {
       
       const redirectUrl = `${window.location.origin}/auth/callback`
       console.log('🔐 [LOGIN] Sending magic link with redirect:', redirectUrl)
-      console.log('🔐 [LOGIN] Supabase URL:', supabaseClient._url)
+      console.log('🔐 [LOGIN] Email:', email)
       
       const { error } = await supabaseClient.auth.signInWithOtp({
         email,
