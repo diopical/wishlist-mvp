@@ -4,7 +4,7 @@ import axios from 'axios'
  * 🔗 Утилита для разрешения коротких ссылок Amazon
  * Поддерживает: a.co, amzn.to, amzn.eu, amzn.com, amzn.asia
  */
-export async function resolveShortUrl(url: string): Promise<string> {
+export async function resolveShortUrl(url: string, maxRetries = 5): Promise<string> {
   // Проверяем, является ли это короткой ссылкой Amazon
   const shortDomains = ['a.co', 'amzn.to', 'amzn.eu', 'amzn.com', 'amzn.asia']
   const isShortUrl = shortDomains.some(domain => url.includes(domain))
@@ -13,59 +13,50 @@ export async function resolveShortUrl(url: string): Promise<string> {
     return url // Обычная ссылка, возвращаем как есть
   }
   
-  console.log(`🔄 Разрешаем короткую ссылку: ${url}`)
+  if (maxRetries <= 0) {
+    console.log(`⚠️ Превышено максимальное количество редиректов для: ${url}`)
+    return url
+  }
+  
+  console.log(`🔄 Разрешаем короткую ссылку: ${url} (осталось попыток: ${maxRetries})`)
   
   try {
-    // Делаем GET запрос с отключением автоматического следования редиректам
     const response = await axios.get(url, {
-      maxRedirects: 0, // Останавливаемся на первом редиректе
-      validateStatus: (status) => status >= 200 && status < 400,
+      maxRedirects: 0, // НЕ следовать редиректам автоматически
+      validateStatus: () => true, // Не выбрасывать ошибку на ЛЮБОЙ статус
       headers: { 
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
       },
       timeout: 10000
     })
     
-    // Если есть редирект, сразу получим location header
-    let finalUrl = response.headers.location || response.config.url || url
+    const status = response.status
+    console.log(`📊 Статус: ${status}`)
     
-    // В случае если это уже финальная страница (без редиректа)
-    if (!finalUrl || finalUrl === url) {
-      finalUrl = response.config.url || url
-    }
-    
-    console.log(`✅ Разрешена короткая ссылка: ${url} -> ${finalUrl}`)
-    
-    // Если всё ещё является редиректом, пробуем ещё раз
-    if (finalUrl.includes('amzn.') || finalUrl.includes('a.co')) {
-      console.log(`🔄 Пробуем разрешить следующий уровень редиректа: ${finalUrl}`)
-      const response2 = await axios.get(finalUrl, {
-        maxRedirects: 0,
-        validateStatus: (status) => status >= 200 && status < 400,
-        headers: { 
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        },
-        timeout: 10000
-      })
-      finalUrl = response2.headers.location || response2.config.url || finalUrl
-      console.log(`✅ Финальный URL: ${finalUrl}`)
-    }
-    
-    return finalUrl
-  } catch (error: any) {
-    // Если получили редирект через ошибку (301/302), ловим его here
-    if (error.response?.headers?.location) {
-      const redirectUrl = error.response.headers.location
-      console.log(`🔄 Редирект через ошибку: ${url} -> ${redirectUrl}`)
-      
-      // Рекурсивно разрешаем, если это снова редирект
-      if (redirectUrl.includes('amzn.') || redirectUrl.includes('a.co')) {
-        return resolveShortUrl(redirectUrl)
+    // Если это редирект (3xx)
+    if (status >= 300 && status < 400) {
+      const locationHeader = response.headers.location
+      if (locationHeader) {
+        console.log(`📍 Редирект найден: ${url} -> ${locationHeader}`)
+        
+        // Рекурсивно разрешаем следующий URL
+        return resolveShortUrl(locationHeader, maxRetries - 1)
       }
-      return redirectUrl
     }
     
-    console.log(`⚠️ Ошибка разрешения короткой ссылки: ${error.message}`)
-    return url // Возвращаем исходную ссылку как fallback
+    // Если это успешный ответ (2xx)
+    if (status >= 200 && status < 300) {
+      console.log(`✅ Финальный URL разрешен: ${url}`)
+      return url
+    }
+    
+    // Для других статусов тоже возвращаем текущий URL
+    console.log(`⚠️ Неожиданный статус ${status} для URL: ${url}`)
+    return url
+    
+  } catch (error: any) {
+    console.log(`❌ Ошибка при разрешении ${url}: ${error.message}`)
+    // В случае ошибки возвращаем исходный URL как fallback
+    return url
   }
 }
