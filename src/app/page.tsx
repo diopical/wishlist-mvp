@@ -105,9 +105,16 @@ export default function Home() {
     setMessage('')
     
     try {
-      if (!supabaseClient) throw new Error('Supabase client not initialized')
+      if (!supabaseClient) {
+        console.error('❌ [LOGIN] Supabase client not initialized')
+        console.log('URL:', process.env.NEXT_PUBLIC_SUPABASE_URL)
+        console.log('Key:', process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.substring(0, 20) + '...')
+        throw new Error('Supabase client not initialized')
+      }
+      
       const redirectUrl = `${window.location.origin}/auth/callback`
       console.log('🔐 [LOGIN] Sending magic link with redirect:', redirectUrl)
+      console.log('🔐 [LOGIN] Supabase URL:', supabaseClient._url)
       
       const { error } = await supabaseClient.auth.signInWithOtp({
         email,
@@ -117,7 +124,9 @@ export default function Home() {
       })
 
       if (error) {
-        console.error('❌ [LOGIN] Error:', error)
+        console.error('❌ [LOGIN] Full error:', error)
+        console.error('❌ [LOGIN] Error status:', error.status)
+        console.error('❌ [LOGIN] Error cause:', error.cause)
         setMessage(`❌ Error: ${error.message}`)
       } else {
         console.log('✅ [LOGIN] Magic link sent successfully')
