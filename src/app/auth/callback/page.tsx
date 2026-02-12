@@ -15,25 +15,33 @@ export default function AuthCallbackPage() {
         // If there is a `code` param (PKCE flow), exchange it server-side via the client
         const url = new URL(window.location.href)
         const code = url.searchParams.get('code')
+        
+        console.log('🔄 [CALLBACK] Page loaded, URL:', url.toString())
+        console.log('🔄 [CALLBACK] Code param:', code ? 'present' : 'missing')
 
         if (!supabaseClient) {
+          console.error('❌ [CALLBACK] No Supabase client')
           setMessage('Missing Supabase client; cannot complete sign-in.')
           return
         }
 
         if (code) {
           // exchange code for session
+          console.log('🔄 [CALLBACK] Exchanging code for session...')
           await supabaseClient.auth.exchangeCodeForSession(code)
         } else {
           // For implicit/fragment flows, supabase-js detects session from URL automatically when the client initializes.
           // Give it a short moment to process the hash and persist the session, then read it.
+          console.log('🔄 [CALLBACK] No code, waiting for fragment flow...')
           await new Promise((r) => setTimeout(r, 200))
         }
 
         const { data, error } = await supabaseClient.auth.getSession()
         if (error) {
-          console.error('Error getting session after callback:', error)
+          console.error('❌ [CALLBACK] Error getting session:', error)
         }
+        
+        console.log('🔄 [CALLBACK] Session check:', { hasSession: !!data?.session, error: error?.message })
 
         if (data?.session) {
           // Send session tokens to the server so it can set HTTP-only cookies
@@ -78,7 +86,13 @@ export default function AuthCallbackPage() {
   return (
     <div className="p-8 max-w-2xl mx-auto text-center">
       <h2 className="text-2xl font-semibold mb-4">Processing sign-in...</h2>
-      <p className="text-gray-600">{message}</p>
+      <p className="text-gray-600 mb-4">{message}</p>
+      <details className="text-left text-sm text-gray-500 mt-4">
+        <summary className="cursor-pointer">Debug info</summary>
+        <pre className="mt-2 p-2 bg-gray-100 rounded overflow-auto text-xs">
+          {typeof window !== 'undefined' ? window.location.href : 'Loading...'}
+        </pre>
+      </details>
     </div>
   )
 }

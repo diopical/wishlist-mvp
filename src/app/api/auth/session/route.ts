@@ -6,7 +6,11 @@ export async function POST(req: Request) {
     const body = await req.json()
     const { access_token, refresh_token } = body || {}
 
+    console.log('📥 [SESSION API] Request received from:', req.headers.get('referer'))
+    console.log('📥 [SESSION API] Has tokens:', { access_token: !!access_token, refresh_token: !!refresh_token })
+
     if (!access_token || !refresh_token || typeof access_token !== 'string' || typeof refresh_token !== 'string') {
+      console.log('❌ [SESSION API] Invalid tokens')
       return new Response(JSON.stringify({ error: 'Missing or invalid tokens' }), { status: 400 })
     }
 
@@ -46,10 +50,12 @@ export async function POST(req: Request) {
     // Validate tokens by fetching the user; if invalid, clear cookies and reject
     const { data: userData, error: userErr } = await supabase.auth.getUser()
     if (userErr || !userData?.user) {
+      console.log('❌ [SESSION API] Invalid user session:', userErr?.message)
       try { await supabase.auth.signOut() } catch (e) {}
       return new Response(JSON.stringify({ error: 'Invalid session tokens' }), { status: 401 })
     }
 
+    console.log('✅ [SESSION API] Session set for user:', userData.user.email)
     return new Response(JSON.stringify({ ok: true }), { status: 200 })
   } catch (err) {
     console.error('API /auth/session error', err)
