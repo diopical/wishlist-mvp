@@ -94,6 +94,27 @@ export default function Home() {
     )
   }
 
+  const logError = async (type: string, error: any) => {
+    console.error(`❌ [${type}]`, error)
+    try {
+      await fetch('/api/debug', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type,
+          error: {
+            message: error?.message || String(error),
+            status: error?.status,
+            cause: error?.cause?.toString?.(),
+            stack: error?.stack?.substring?.(0, 200),
+          },
+        }),
+      })
+    } catch (logErr) {
+      console.error('Failed to send error log:', logErr)
+    }
+  }
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!email) {
@@ -106,10 +127,9 @@ export default function Home() {
     
     try {
       if (!supabaseClient) {
-        console.error('❌ [LOGIN] Supabase client not initialized')
-        console.log('URL:', process.env.NEXT_PUBLIC_SUPABASE_URL)
-        console.log('Key:', process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.substring(0, 20) + '...')
-        throw new Error('Supabase client not initialized')
+        const err = new Error('Supabase client not initialized')
+        logError('LOGIN_NO_CLIENT', err)
+        throw err
       }
       
       const redirectUrl = `${window.location.origin}/auth/callback`
@@ -124,9 +144,7 @@ export default function Home() {
       })
 
       if (error) {
-        console.error('❌ [LOGIN] Full error:', error)
-        console.error('❌ [LOGIN] Error status:', error.status)
-        console.error('❌ [LOGIN] Error cause:', error.cause)
+        logError('LOGIN_OTP_ERROR', error)
         setMessage(`❌ Error: ${error.message}`)
       } else {
         console.log('✅ [LOGIN] Magic link sent successfully')
@@ -134,7 +152,7 @@ export default function Home() {
         setEmail('')
       }
     } catch (err) {
-      console.error('Login exception:', err)
+      logError('LOGIN_EXCEPTION', err)
       setMessage('❌ Error sending email')
     } finally {
       setLoading(false)
@@ -143,20 +161,28 @@ export default function Home() {
 
   const handleGoogleSignIn = async () => {
     try {
-      if (!supabaseClient) throw new Error('Supabase client not initialized')
+      if (!supabaseClient) {
+        const err = new Error('Supabase client not initialized')
+        logError('GOOGLE_NO_CLIENT', err)
+        throw err
+      }
+      
+      const redirectUrl = `${window.location.origin}/auth/callback`
+      console.log('🔑 [GOOGLE] Attempting sign-in with redirect:', redirectUrl)
+      
       const { error } = await supabaseClient.auth.signInWithOAuth({
         provider: 'google',
-        options: { redirectTo: `${window.location.origin}/auth/callback` },
+        options: { redirectTo: redirectUrl },
       })
 
       if (error) {
-        console.error('Google sign-in error:', error)
+        logError('GOOGLE_OAUTH_ERROR', error)
         setMessage(`❌ ${error.message}`)
       } else {
         setMessage('Redirecting to Google...')
       }
     } catch (err) {
-      console.error('Google sign-in exception:', err)
+      logError('GOOGLE_EXCEPTION', err)
       setMessage('❌ Error starting Google sign-in')
     }
   }
