@@ -2,7 +2,8 @@ import { createServerSupabase } from '@/lib/supabase-server'
 import { NextRequest, NextResponse } from 'next/server'
 import axios from 'axios'
 import * as cheerio from 'cheerio'
-import { resolveShortUrl } from '@/lib/resolve-short-url'
+import { resolveShortUrl, getAmazonHeaders } from '@/lib/resolve-short-url'
+import { parserLogger } from '@/lib/parser-logger'
 
 const TAG = 'your-affiliate-tag-123'
 
@@ -18,12 +19,14 @@ export async function POST(
 ) {
   try {
     const { id } = await params
+    parserLogger.info(`Добавление товаров в вишлист: ${id}`)
     
     // Проверяем авторизацию
     const supabase = await createServerSupabase()
     const { data: { user }, error: authError } = await supabase.auth.getUser()
 
     if (authError || !user) {
+      parserLogger.error('Ошибка авторизации')
       return NextResponse.json(
         { error: 'Не авторизован' },
         { status: 401 }
@@ -35,6 +38,7 @@ export async function POST(
     const { urls } = body
 
     if (!urls || !Array.isArray(urls) || urls.length === 0) {
+      parserLogger.error('Нет URL в запросе')
       return NextResponse.json(
         { error: 'Необходимо указать массив URLs' },
         { status: 400 }
@@ -50,6 +54,7 @@ export async function POST(
       .single()
 
     if (wishlistError || !wishlist) {
+      parserLogger.error('Вишлист не найден')
       return NextResponse.json(
         { error: 'Вишлист не найден' },
         { status: 404 }
@@ -61,7 +66,7 @@ export async function POST(
       (wishlist.items || []).map((item: any) => item.asin)
     )
 
-    console.log(`📦 Существующих товаров: ${existingAsins.size}`)
+    parserLogger.info(`Существующих товаров в вишлисте: ${existingAsins.size}`)
 
     // Массив для новых товаров
     const newItems: any[] = []
@@ -70,22 +75,30 @@ export async function POST(
     // Обрабатываем каждый URL
     for (const url of urls) {
       try {
+        parserLogger.info(`Обработка URL: ${url}`)
         // 🔗 Разрешаем короткие ссылки перед парсингом
         const resolvedUrl = await resolveShortUrl(url)
         
         const { data: html } = await axios.get(resolvedUrl, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-          },
+          headers: getAmazonHeaders(),
           timeout: 15000
         })
 
         const $ = cheerio.load(html)
 
-        // Извлекаем ссылки на товары
+        // Извлекаем ссылки на товары (специфичные селекторы для wishlist)
         let productUrls = $(
-          '.a-carousel-viewport a[href*="/dp/"], a[href*="/gp/product/"], .a-link-normal[href*="/dp/"], a[data-asin]'
+          // Товары в основном вишлисте
+          '[data-item-index] a[href*="/dp/"], ' +
+          '.g-item-sortable a[href*="/dp/"], ' +
+          // Карусель товаров  
+          '.a-carousel-viewport a[href*="/dp/"], ' +
+          // Fallback для других страниц товаров
+          'main a[href*="/dp/"]'
         )
+          .not('[data-component-type="s-search-result"]') // Исключаем результаты поиска
+          .not('.g-show-more-list a') // Исключаем "показать еще"
+          .not('[data-feature-name="dp_feature_div"]') // Исключаем связанные товары
           .map((_, el) => {
             let href = $(el).attr('href') || $(el).attr('data-href')
             if (!href?.includes('http')) {
@@ -107,7 +120,7 @@ export async function POST(
           }
         }
 
-        console.log(`🔗 URL: ${url}, найдено товаров: ${productUrls.length}`)
+        parserLogger.info(`Обработка URL: ${url}, найдено товаров: ${productUrls.length}`)
 
         // Парсим каждый товар
         for (const productUrl of productUrls.slice(0, 100)) {
@@ -115,9 +128,7 @@ export async function POST(
 
           try {
             const { data: productHtml } = await axios.get(productUrl, {
-              headers: {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-              },
+              headers: getAmazonHeaders(),
               timeout: 10000
             })
 
@@ -128,7 +139,7 @@ export async function POST(
             // Проверяем дубликат
             if (existingAsins.has(asin)) {
               duplicatesCount++
-              console.log(`⏭️ Пропущен дубликат: ${asin}`)
+              parserLogger.warning(`Пропущен дубликат товара: ${asin}`)
               continue
             }
 

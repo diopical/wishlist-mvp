@@ -1,4 +1,20 @@
 import axios from 'axios'
+import { parserLogger } from './parser-logger'
+
+/**
+ * 📍 Получить реалистичные headers для запроса к Amazon
+ */
+export function getAmazonHeaders() {
+  return {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+    'Accept-Language': 'en-US,en;q=0.9',
+    'Accept-Encoding': 'gzip, deflate, br',
+    'DNT': '1',
+    'Cache-Control': 'max-age=0',
+    'Upgrade-Insecure-Requests': '1',
+  }
+}
 
 /**
  * 🔗 Утилита для разрешения коротких ссылок Amazon
@@ -14,30 +30,28 @@ export async function resolveShortUrl(url: string, maxRetries = 5): Promise<stri
   }
   
   if (maxRetries <= 0) {
-    console.log(`⚠️ Превышено максимальное количество редиректов для: ${url}`)
+    parserLogger.warning(`Превышено максимальное количество редиректов для: ${url}`)
     return url
   }
   
-  console.log(`🔄 Разрешаем короткую ссылку: ${url} (осталось попыток: ${maxRetries})`)
+  parserLogger.info(`Разрешаем короткую ссылку: ${url} (осталось попыток: ${maxRetries})`)
   
   try {
     const response = await axios.get(url, {
       maxRedirects: 0, // НЕ следовать редиректам автоматически
       validateStatus: () => true, // Не выбрасывать ошибку на ЛЮБОЙ статус
-      headers: { 
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-      },
+      headers: getAmazonHeaders(),
       timeout: 10000
     })
     
     const status = response.status
-    console.log(`📊 Статус: ${status}`)
+    parserLogger.info(`Статус: ${status}`)
     
     // Если это редирект (3xx)
     if (status >= 300 && status < 400) {
       const locationHeader = response.headers.location
       if (locationHeader) {
-        console.log(`📍 Редирект найден: ${url} -> ${locationHeader}`)
+        parserLogger.info(`Редирект найден: ${url} -> ${locationHeader}`)
         
         // Рекурсивно разрешаем следующий URL
         return resolveShortUrl(locationHeader, maxRetries - 1)
@@ -46,16 +60,16 @@ export async function resolveShortUrl(url: string, maxRetries = 5): Promise<stri
     
     // Если это успешный ответ (2xx)
     if (status >= 200 && status < 300) {
-      console.log(`✅ Финальный URL разрешен: ${url}`)
+      parserLogger.success(`Финальный URL разрешен: ${url}`)
       return url
     }
     
     // Для других статусов тоже возвращаем текущий URL
-    console.log(`⚠️ Неожиданный статус ${status} для URL: ${url}`)
+    parserLogger.warning(`Неожиданный статус ${status} для URL: ${url}`)
     return url
     
   } catch (error: any) {
-    console.log(`❌ Ошибка при разрешении ${url}: ${error.message}`)
+    parserLogger.error(`Ошибка при разрешении ${url}: ${error.message}`)
     // В случае ошибки возвращаем исходный URL как fallback
     return url
   }

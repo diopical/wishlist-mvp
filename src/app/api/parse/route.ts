@@ -4,7 +4,8 @@ import axios from 'axios'
 import * as cheerio from 'cheerio'
 import { createClient } from '@supabase/supabase-js'
 import { customAlphabet } from 'nanoid/non-secure'
-import { resolveShortUrl } from '@/lib/resolve-short-url'
+import { resolveShortUrl, getAmazonHeaders } from '@/lib/resolve-short-url'
+import { parserLogger } from '@/lib/parser-logger'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
@@ -15,12 +16,13 @@ const TAG = 'your-affiliate-tag-123'
 export async function POST(req: NextRequest) {
   try {
     const body = await req.text()
-    console.log('📥 Body:', body)
+    parserLogger.info('Получен запрос парсирования', { bodyLength: body.length })
     
     const { urls }: { urls: string[] } = JSON.parse(body)
-    console.log('🔗 URLs:', urls)
+    parserLogger.info(`Количество URL для парсирования: ${urls.length}`, { urls })
     
     if (!urls?.length) {
+      parserLogger.error('Нет URL в запросе')
       return NextResponse.json({ error: 'No URLs' }, { status: 400 })
     }
 
@@ -28,22 +30,33 @@ export async function POST(req: NextRequest) {
 
     for (const url of urls.slice(0, 10)) {  // 10 wishlist max
       try {
-        console.log(`🕷️ Парсим: ${url}`)
+        parserLogger.info(`Начинаем парсирование URL: ${url}`)
         
         // 🔗 Разрешаем короткие ссылки перед парсингом
         const resolvedUrl = await resolveShortUrl(url)
         
         const { data: html } = await axios.get(resolvedUrl, {
-          headers: { 
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-          },
+          headers: getAmazonHeaders(),
           timeout: 15000
         })
         
         const $ = cheerio.load(html)
 
-        // 🛒 Wishlist → ВСЕ product ссылки (без .slice!)
-        let productUrls = $('.a-carousel-viewport a[href*="/dp/"], a[href*="/gp/product/"], .a-link-normal[href*="/dp/"], a[data-asin]').map((_, el) => {
+        // 🛒 Wishlist → ВСЕ product ссылки (специфичные селекторы для wishlist)
+        // Ищем товары только в основном контенте вишлиста, не в рекомендациях
+        let productUrls = $(
+          // Товары в основном вишлисте
+          '[data-item-index] a[href*="/dp/"], ' +
+          '.g-item-sortable a[href*="/dp/"], ' +
+          // Карусель товаров  
+          '.a-carousel-viewport a[href*="/dp/"], ' +
+          // Fallback для других страниц товаров
+          'main a[href*="/dp/"]'
+        )
+          .not('[data-component-type="s-search-result"]') // Исключаем результаты поиска
+          .not('.g-show-more-list a') // Исключаем "показать еще"
+          .not('[data-feature-name="dp_feature_div"]') // Исключаем связанные товары
+          .map((_, el) => {
           let href = $(el).attr('href') || $(el).attr('data-href')
           if (!href?.includes('http')) {
             // Получаем домен из разрешенного URL
@@ -62,7 +75,7 @@ export async function POST(req: NextRequest) {
           }
         }
 
-        console.log(`🛒 Найдено товаров: ${productUrls.length}`)
+        parserLogger.info(`Найдено ссылок на товары: ${productUrls.length}`, { productUrls })
 
         // ✨ Парсим ВСЕ товары (max 100)
         for (const productUrl of productUrls.slice(0, 100)) {
@@ -70,7 +83,7 @@ export async function POST(req: NextRequest) {
           
           try {
             const { data: productHtml } = await axios.get(productUrl, { 
-              headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }, 
+              headers: getAmazonHeaders(),
               timeout: 10000 
             })
             const $product = cheerio.load(productHtml)
@@ -166,7 +179,7 @@ export async function POST(req: NextRequest) {
                 url: productUrl,
                 affiliate: `https://${domain}/dp/${asin}?tag=${TAG}` 
               })
-              console.log(`✅ ${title.slice(0, 40)}... ${asin} - ${priceWithCurrency}`)
+              parserLogger.success(`Товар добавлен: ${title.slice(0, 40)}... - ${asin}`)
             }
           } catch (productError: any) {
             // Тихо пропускаем битые товары
@@ -174,28 +187,28 @@ export async function POST(req: NextRequest) {
         }
 
       } catch (urlError: any) {
-        console.log(`❌ ${url.slice(0, 80)}...: ${urlError.message}`)
+        parserLogger.error(`Ошибка при парсинге ${url.slice(0, 80)}: ${urlError.message}`)
         items.push({ asin: '', title: `Error: ${url.slice(-60)}`, price: 'N/A', img: '' })
       }
     }
 
     const short_id = nanoid()
-    console.log('💾 Saving:', short_id, items.length, 'товаров')
+    parserLogger.info(`Сохраняем вишлист: ${short_id} с ${items.length} товарами`)
     
     const { error } = await supabase
       .from('wishes')
       .insert({ items, short_id })
     
     if (error) {
-      console.error('❌ Supabase:', error)
+      parserLogger.error('Ошибка Supabase при сохранении', { error: error.message })
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    console.log('🎉 Saved! Всего товаров:', items.length)
+    parserLogger.success(`Вишлист успешно сохранен! Всего товаров: ${items.length}`)
     return NextResponse.json({ short_id })
 
   } catch (error: any) {
-    console.error('💥 Full ERROR:', error.message)
+    parserLogger.error('Критическая ошибка при парсировании', { error: error.message })
     return NextResponse.json({ error: error.message || 'Parse failed' }, { status: 500 })
   }
 }
