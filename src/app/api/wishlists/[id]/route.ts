@@ -79,9 +79,7 @@ export async function PUT(
     const { destination, items } = body
 
     // Подготавливаем объект для обновления
-    const updateData: any = {
-      updated_at: new Date().toISOString()
-    }
+    const updateData: any = {}
 
     // Обновляем только те поля, которые переданы
     if (destination !== undefined) {
@@ -92,7 +90,7 @@ export async function PUT(
     }
 
     // Проверяем, что есть что обновлять
-    if (Object.keys(updateData).length === 1) {
+    if (Object.keys(updateData).length === 0) {
       return NextResponse.json(
         { error: 'Нет данных для обновления' },
         { status: 400 }

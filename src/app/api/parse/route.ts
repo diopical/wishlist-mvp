@@ -65,12 +65,82 @@ export async function POST(req: NextRequest) {
             const $product = cheerio.load(productHtml)
             
             const asin = productUrl.match(/dp\/([A-Z0-9]{10})/)?.[1] || ''
-            const title = $product('#productTitle, h1 span, .a-size-large, [data-testid="product-title"]').first().text().trim().slice(0, 120) || 'N/A'
             
-            // 💰 Цена (whole + fraction)
-            const priceWhole = $product('.a-price-whole, .price-whole').first().text().trim()
-            const priceFraction = $product('.a-price-fraction, .price-fraction').first().text().trim()
-            const price = `${priceWhole || ''}${priceFraction || ''}`.trim() || 'N/A'
+            // 📝 Название - избегаем скидок и промо-блоков
+            let title = $product('#productTitle').first().text().trim()
+            if (!title) {
+              title = $product('h1.product-title, h1 span.product-title-word-break').first().text().trim()
+            }
+            if (!title) {
+              title = $product('[data-testid="product-title"]').first().text().trim()
+            }
+            // Обрезаем до первой скобки/запятой если слишком длинное
+            title = title.replace(/\s*[\(|\[].+$/, '').slice(0, 120).trim() || 'N/A'
+            
+            // 💰 Цена - улучшенный парсинг с несколькими подходами
+            let price = ''
+            let currency = ''
+            
+            // Подход 1: целая цена + дробная часть
+            const priceWhole = $product('.a-price[data-a-color="price"] .a-price-whole, .a-price .a-price-whole').first().text().trim()
+            const priceFraction = $product('.a-price[data-a-color="price"] .a-price-fraction, .a-price .a-price-fraction').first().text().trim()
+            const priceSymbol = $product('.a-price[data-a-color="price"] .a-price-symbol, .a-price .a-price-symbol').first().text().trim()
+            
+            if (priceWhole) {
+              price = `${priceWhole}${priceFraction || ''}`
+              currency = priceSymbol
+            }
+            
+            // Подход 2: полная цена одним элементом
+            if (!price) {
+              const fullPrice = $product('.a-price[data-a-color="price"] .a-offscreen, #corePrice_feature_div .a-offscreen').first().text().trim()
+              if (fullPrice) {
+                // Извлекаем валюту и число: "AED 299.00" -> currency="AED", price="299.00"
+                const match = fullPrice.match(/([A-Z]{3}|[€$£¥₹])\s*([\d,\.]+)/)
+                if (match) {
+                  currency = match[1]
+                  price = match[2]
+                } else {
+                  // Если символ в конце: "299.00 AED"
+                  const matchEnd = fullPrice.match(/([\d,\.]+)\s*([A-Z]{3}|[€$£¥₹])/)
+                  if (matchEnd) {
+                    price = matchEnd[1]
+                    currency = matchEnd[2]
+                  } else {
+                    price = fullPrice.replace(/[^\d,\.]/g, '')
+                    currency = fullPrice.replace(/[\d,\.\s]/g, '')
+                  }
+                }
+              }
+            }
+            
+            // Подход 3: старые селекторы (fallback)
+            if (!price) {
+              const oldWhole = $product('.price-whole, span[aria-hidden="true"].a-price-whole').first().text().trim()
+              const oldFraction = $product('.price-fraction').first().text().trim()
+              if (oldWhole) {
+                price = `${oldWhole}${oldFraction || ''}`
+                currency = $product('.price-symbol, .a-price-symbol').first().text().trim()
+              }
+            }
+            
+            // Очистка цены от лишних символов (оставляем только цифры, точки и запятые)
+            price = price.replace(/\s+/g, '').replace(/,/g, '.') || 'N/A'
+            
+            // Определение валюты если еще не определена
+            if (!currency && price !== 'N/A') {
+              // Пробуем определить по домену
+              const domain = new URL(productUrl).hostname
+              if (domain.includes('.ae')) currency = 'AED'
+              else if (domain.includes('.com')) currency = 'USD'
+              else if (domain.includes('.co.uk')) currency = 'GBP'
+              else if (domain.includes('.de') || domain.includes('.fr') || domain.includes('.es') || domain.includes('.it')) currency = 'EUR'
+              else if (domain.includes('.in')) currency = 'INR'
+              else if (domain.includes('.jp')) currency = 'JPY'
+            }
+            
+            // Форматируем цену с валютой
+            const priceWithCurrency = currency && price !== 'N/A' ? `${currency} ${price}` : price
             
             const img = $product('#landingImage, .a-dynamic-image, img[src*="images-amazon"], [data-a-image-primary]').first().attr('src') || ''
 
@@ -80,12 +150,12 @@ export async function POST(req: NextRequest) {
               items.push({ 
                 asin, 
                 title, 
-                price, 
+                price: priceWithCurrency, 
                 img, 
                 url: productUrl,
                 affiliate: `https://${domain}/dp/${asin}?tag=${TAG}` 
               })
-              console.log(`✅ ${title.slice(0, 40)}... ${asin}`)
+              console.log(`✅ ${title.slice(0, 40)}... ${asin} - ${priceWithCurrency}`)
             }
           } catch (productError: any) {
             // Тихо пропускаем битые товары
@@ -102,7 +172,7 @@ export async function POST(req: NextRequest) {
     console.log('💾 Saving:', short_id, items.length, 'товаров')
     
     const { error } = await supabase
-      .from('wishlists')
+      .from('wishes')
       .insert({ items, short_id })
     
     if (error) {
