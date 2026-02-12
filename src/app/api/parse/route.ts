@@ -6,7 +6,7 @@ import { createClient } from '@supabase/supabase-js'
 import { customAlphabet } from 'nanoid/non-secure'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY!
+const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 const supabase = createClient(supabaseUrl, supabaseKey)
 const nanoid = customAlphabet('0123456789abcdef', 8)
 const TAG = 'your-affiliate-tag-123'
