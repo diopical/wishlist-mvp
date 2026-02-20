@@ -32,6 +32,27 @@ interface Props {
 export default function DashboardContent({ wishlists, userEmail }: Props) {
   const router = useRouter()
 
+  const handleDeleteWishlist = async (id: string, name: string) => {
+    if (!confirm(`Вы уверены? Вишлист "${name}" будет удален безвозвратно!`)) {
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/wishlists/${id}`, {
+        method: 'DELETE',
+      })
+
+      if (!response.ok) {
+        throw new Error('Не удалось удалить вишлист')
+      }
+
+      // Перезагружаем страницу для обновления списка
+      router.refresh()
+    } catch (error: any) {
+      alert('Ошибка: ' + (error.message || 'Не удалось удалить вишлист'))
+    }
+  }
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 via-purple-50 to-pink-50 py-12">
       {/* Декоративные фоновые элементы */}
@@ -164,13 +185,13 @@ export default function DashboardContent({ wishlists, userEmail }: Props) {
                     </div>
 
                     {/* Кнопки действий */}
-                    <div className="flex gap-3">
+                    <div className="flex gap-2 sm:gap-3">
                       <button
                         onClick={() => router.push(`/wishlists/${wishlist.id}`)}
                         className="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white py-3 px-4 rounded-2xl text-center transition-all font-bold shadow-lg hover:shadow-xl transform hover:scale-105 flex items-center justify-center gap-2 text-sm"
                       >
                         <span>✏️</span>
-                        Править
+                        <span className="hidden sm:inline">Править</span>
                       </button>
                       <a
                         href={`/w/${wishlist.short_id}`}
@@ -178,8 +199,15 @@ export default function DashboardContent({ wishlists, userEmail }: Props) {
                         className="flex-1 bg-gradient-to-r from-pink-500 to-orange-500 hover:from-pink-600 hover:to-orange-600 text-white py-3 px-4 rounded-2xl text-center transition-all font-bold shadow-lg hover:shadow-xl transform hover:scale-105 flex items-center justify-center gap-2 text-sm"
                       >
                         <span>🚀</span>
-                        Открыть
+                        <span className="hidden sm:inline">Открыть</span>
                       </a>
+                      <button
+                        onClick={() => handleDeleteWishlist(wishlist.id, wishlist.destination)}
+                        className="bg-red-500/20 hover:bg-red-500 text-red-700 hover:text-white py-3 px-4 rounded-2xl transition-all font-bold shadow-lg hover:shadow-xl transform hover:scale-105 flex items-center justify-center text-sm"
+                        title="Удалить вишлист"
+                      >
+                        <span>🗑️</span>
+                      </button>
                     </div>
                   </div>
                 </div>

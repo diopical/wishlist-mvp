@@ -25,6 +25,7 @@ interface Wishlist {
   items: WishlistItem[]
   created_at: string
   updated_at: string
+  require_name_for_reserve?: boolean // Требовать имя при резервировании
 }
 
 interface Props {
@@ -55,9 +56,16 @@ export default function EditWishlist({ wishlistId }: Props) {
   const [editingTitle, setEditingTitle] = useState(false)
   const [title, setTitle] = useState('')
   
+  // Состояние для параметров вишлиста
+  const [requireNameForReserve, setRequireNameForReserve] = useState(false)
+  const [customShortId, setCustomShortId] = useState('')
+  const [validatingShortId, setValidatingShortId] = useState(false)
+  const [shortIdError, setShortIdError] = useState<string | null>(null)
+  const [username, setUsername] = useState('')
+  
   // Состояние для редактирования товаров
-  const [editingItem, setEditingItem] = useState<string | null>(null)
   const [tempItems, setTempItems] = useState<WishlistItem[]>([])
+  const [changedItems, setChangedItems] = useState<Set<string>>(new Set()) // Отслеживание измененных товаров
   
   // Состояние для выбора изображений
   const [loadingImages, setLoadingImages] = useState<string | null>(null)
@@ -80,6 +88,13 @@ export default function EditWishlist({ wishlistId }: Props) {
    */
   const loadWishlist = async () => {
     try {
+      // Загружаем профиль для получения username
+      const profileResponse = await fetch('/api/profile')
+      if (profileResponse.ok) {
+        const profileData = await profileResponse.json()
+        setUsername(profileData.username || '')
+      }
+
       const response = await fetch(`/api/wishlists/${wishlistId}`)
       
       if (!response.ok) {
@@ -90,11 +105,114 @@ export default function EditWishlist({ wishlistId }: Props) {
       setWishlist(data)
       setTitle(data.destination || '')
       setTempItems(data.items || [])
+      setRequireNameForReserve(data.require_name_for_reserve || false)
+      setCustomShortId(data.custom_short_id || '')
     } catch (error: any) {
       console.error('Error loading wishlist:', error)
       setError(error.message)
     } finally {
       setLoading(false)
+    }
+  }
+
+  /**
+   * Валидация custom_short_id
+   */
+  const validateShortId = async (value: string) => {
+    if (!value.trim()) {
+      setShortIdError(null)
+      return true
+    }
+
+    // Валидация формата
+    if (!/^[a-zA-Z0-9_-]{3,20}$/.test(value)) {
+      setShortIdError('Может содержать буквы, цифры, подчеркивание и дефис (3-20 символов)')
+      return false
+    }
+
+    // Проверка уникальности
+    setValidatingShortId(true)
+    try {
+      const response = await fetch(`/api/wishlists/check-short-id?short_id=${value}&exclude=${wishlist?.id}`)
+      const data = await response.json()
+      
+      if (!data.available) {
+        setShortIdError('Этот адрес уже занят')
+        setValidatingShortId(false)
+        return false
+      }
+      
+      setShortIdError(null)
+      setValidatingShortId(false)
+      return true
+    } catch (error) {
+      setShortIdError('Ошибка проверки')
+      setValidatingShortId(false)
+      return false
+    }
+  }
+
+  const handleShortIdChange = async (value: string) => {
+    setCustomShortId(value)
+    await validateShortId(value)
+  }
+
+  /**
+   * Генерирует публичную ссылку для вишлиста
+   */
+  const getPublicUrl = (): string => {
+    const baseUrl = typeof window !== 'undefined' ? window.location.origin : ''
+    const id = customShortId || wishlist?.short_id || wishlist?.id
+    
+    if (username && customShortId) {
+      return `${baseUrl}/share/${username}/${customShortId}`
+    }
+    
+    if (username) {
+      return `${baseUrl}/share/${username}/${wishlist?.short_id || wishlist?.id}`
+    }
+    
+    return `${baseUrl}/w/${id}`
+  }
+
+  /**
+   * Сохранение изменений параметров вишлиста
+   */
+  const saveSettings = async () => {
+    // Валидируем custom_short_id если он изменился
+    if (customShortId !== (wishlist?.custom_short_id || '')) {
+      const isValid = await validateShortId(customShortId)
+      if (!isValid && customShortId.trim()) return
+    }
+
+    setSaving(true)
+    try {
+      const updateData: any = {
+        require_name_for_reserve: requireNameForReserve 
+      }
+
+      if (customShortId !== (wishlist?.custom_short_id || '')) {
+        updateData.custom_short_id = customShortId || null
+      }
+
+      const response = await fetch(`/api/wishlists/${wishlistId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updateData),
+      })
+
+      if (!response.ok) {
+        throw new Error('Не удалось обновить настройки')
+      }
+
+      const data = await response.json()
+      setWishlist(data.wishlist)
+      setMessage({ type: 'success', text: 'Настройки обновлены!' })
+      setTimeout(() => setMessage(null), 3000)
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.message })
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -149,7 +267,6 @@ export default function EditWishlist({ wishlistId }: Props) {
 
       const data = await response.json()
       setWishlist(data.wishlist)
-      setEditingItem(null)
       setMessage({ type: 'success', text: 'Изменения сохранены!' })
       setTimeout(() => setMessage(null), 3000)
     } catch (error: any) {
@@ -276,6 +393,41 @@ export default function EditWishlist({ wishlistId }: Props) {
         item.asin === asin ? { ...item, [field]: value } : item
       )
     )
+    // Отмечаем товар как измененный
+    setChangedItems(prev => new Set(prev).add(asin))
+  }
+
+  /**
+   * Сохранение всех изменений товаров
+   */
+  const saveAllItems = async () => {
+    if (changedItems.size === 0) {
+      setMessage({ type: 'error', text: 'Нет изменений для сохранения' })
+      return
+    }
+
+    setSaving(true)
+    try {
+      const response = await fetch(`/api/wishlists/${wishlistId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: tempItems }),
+      })
+
+      if (!response.ok) {
+        throw new Error('Не удалось обновить товары')
+      }
+
+      const data = await response.json()
+      setWishlist(data.wishlist)
+      setChangedItems(new Set())
+      setMessage({ type: 'success', text: 'Все изменения сохранены!' })
+      setTimeout(() => setMessage(null), 3000)
+    } catch (error: any) {
+      setMessage({ type: 'error', text: error.message })
+    } finally {
+      setSaving(false)
+    }
   }
 
   /**
@@ -467,7 +619,7 @@ export default function EditWishlist({ wishlistId }: Props) {
               </div>
             </div>
             <a
-              href={`/w/${wishlist.short_id}`}
+              href={getPublicUrl()}
               target="_blank"
               className="flex items-center gap-3 px-4 py-3 bg-gradient-to-br from-green-50 to-emerald-50 rounded-2xl border border-green-200 hover:scale-105 transition-transform group"
             >
@@ -478,6 +630,76 @@ export default function EditWishlist({ wishlistId }: Props) {
               </div>
             </a>
           </div>
+
+          {/* Настройки резервирования */}
+          <div className="mt-8 pt-8 border-t border-gray-200">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-rose-500 to-pink-600 flex items-center justify-center text-2xl shadow-lg">
+                ⚙️
+              </div>
+              <h2 className="text-xl sm:text-2xl font-black text-gray-800">Настройки публичного доступа</h2>
+            </div>
+            
+            <div className="space-y-4">
+              {/* Custom short ID */}
+              <div>
+                <label htmlFor="custom_short_id" className="block text-sm font-semibold text-gray-800 mb-2">
+                  🔗 Адрес вишлиста (опционально)
+                </label>
+                <div className="space-y-2">
+                  <input
+                    type="text"
+                    id="custom_short_id"
+                    value={customShortId}
+                    onChange={(e) => setCustomShortId(e.target.value)}
+                    placeholder={wishlist?.short_id || 'мой-вишлист'}
+                    className={`w-full px-4 py-3 border-2 rounded-xl focus:ring-2 focus:ring-blue-500 transition bg-white text-gray-900 placeholder-gray-400 font-medium shadow-sm ${
+                      shortIdError ? 'border-red-400' : 'border-blue-200'
+                    }`}
+                    pattern="^[a-zA-Z0-9_-]{3,20}$"
+                    maxLength={20}
+                  />
+                  {shortIdError && (
+                    <p className="text-sm text-red-600 font-medium">⚠️ {shortIdError}</p>
+                  )}
+                  <p className="text-sm text-gray-600">
+                    💡 Публичная ссылка:{' '}
+                    <code className="bg-gray-100 px-2 py-1 rounded text-blue-600 font-mono">
+                      {getPublicUrl()}
+                    </code>
+                  </p>
+                </div>
+              </div>
+
+              {/* Требовать имя при резервировании */}
+              <label className="flex items-start gap-4 p-4 bg-gradient-to-br from-rose-50 to-pink-50 rounded-2xl border border-rose-200 cursor-pointer hover:border-rose-300 transition-all">
+                <input
+                  type="checkbox"
+                  checked={requireNameForReserve}
+                  onChange={(e) => setRequireNameForReserve(e.target.checked)}
+                  className="w-6 h-6 rounded-lg border-2 border-rose-300 cursor-pointer mt-1 flex-shrink-0 accent-rose-500"
+                />
+                <div className="flex-grow">
+                  <p className="font-bold text-gray-900 text-base">Требовать имя при резервировании</p>
+                  <p className="text-sm text-gray-600 mt-1">
+                    Если включить, гости должны указать свое имя при резервировании подарка. 
+                    По умолчанию резервирование анонимное.
+                  </p>
+                </div>
+              </label>
+              
+              {(requireNameForReserve !== (wishlist?.require_name_for_reserve || false) ||
+                customShortId !== (wishlist?.custom_short_id || '')) && (
+                <button
+                  onClick={saveSettings}
+                  disabled={saving || validatingShortId || (shortIdError && customShortId.trim() ? true : false)}
+                  className="w-full px-6 py-3 bg-gradient-to-r from-rose-500 to-pink-500 hover:from-rose-600 hover:to-pink-600 text-white rounded-2xl transition-all disabled:opacity-50 font-bold shadow-lg hover:shadow-xl text-base transform hover:scale-105 flex items-center justify-center gap-2"
+                >
+                  <span>💾</span>
+                  Сохранить настройки
+                </button>
+              )}
+            </div>
         </div>
       </div>
 
@@ -605,104 +827,99 @@ export default function EditWishlist({ wishlistId }: Props) {
                       )}
                     </div>
                     
-                    {/* Кнопка выбора изображений */}
-                    {editingItem === item.asin && (
-                      <button
-                        onClick={() => loadAlternativeImages(item.asin, item.url)}
-                        disabled={loadingImages === item.asin}
-                        className="mt-3 w-full px-3 py-2 text-xs font-bold bg-gradient-to-r from-purple-100 to-pink-100 hover:from-purple-200 hover:to-pink-200 text-purple-700 rounded-xl transition disabled:opacity-50 shadow-md hover:shadow-lg transform hover:scale-105 flex items-center justify-center gap-2"
-                      >
-                        {loadingImages === item.asin ? (
-                          <>
-                            <div className="w-4 h-4 border-2 border-purple-600 border-t-transparent rounded-full animate-spin"></div>
-                            Загрузка...
-                          </>
-                        ) : (
-                          <>
-                            <span>🖼️</span>
-                            Другие фото
-                          </>
-                        )}
-                      </button>
-                    )}
                   </div>
 
                   {/* Информация */}
                   <div className="flex-1 min-w-0">
-                    {editingItem === item.asin ? (
-                      <div className="space-y-4">
-                        {/* Галерея альтернативных изображений */}
-                        {alternativeImages[item.asin] && alternativeImages[item.asin].length > 0 && (
-                          <div className="p-4 bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl border-2 border-purple-200 shadow-inner">
-                            <p className="text-sm font-bold text-purple-700 mb-3 flex items-center gap-2">
-                              <span>📸</span>
-                              Выберите изображение ({alternativeImages[item.asin].length} доступно):
-                            </p>
-                            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
-                              {alternativeImages[item.asin].map((imgUrl, idx) => (
-                                <button
-                                  key={idx}
-                                  onClick={() => selectImage(item.asin, imgUrl)}
-                                  className={`relative h-20 rounded-xl border-2 transition-all hover:scale-110 shadow-md ${
-                                    item.img === imgUrl 
-                                      ? 'border-purple-600 ring-4 ring-purple-400/50 scale-105' 
-                                      : 'border-gray-300 hover:border-purple-400'
-                                  }`}
-                                >
-                                  <img
-                                    src={imgUrl}
-                                    alt={`Option ${idx + 1}`}
-                                    className="w-full h-full object-cover rounded-lg"
-                                  />
-                                  {item.img === imgUrl && (
-                                    <div className="absolute inset-0 bg-purple-600/30 rounded-lg flex items-center justify-center">
-                                      <span className="text-white text-3xl drop-shadow-lg">✓</span>
-                                    </div>
-                                  )}
-                                </button>
-                              ))}
-                            </div>
+                    <div className="space-y-4">
+                      {/* Галерея альтернативных изображений */}
+                      {alternativeImages[item.asin] && alternativeImages[item.asin].length > 0 && (
+                        <div className="p-4 bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl border-2 border-purple-200 shadow-inner">
+                          <p className="text-sm font-bold text-purple-700 mb-3 flex items-center gap-2">
+                            <span>📸</span>
+                            Выберите изображение ({alternativeImages[item.asin].length} доступно):
+                          </p>
+                          <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
+                            {alternativeImages[item.asin].map((imgUrl, idx) => (
+                              <button
+                                key={idx}
+                                onClick={() => selectImage(item.asin, imgUrl)}
+                                className={`relative h-20 rounded-xl border-2 transition-all hover:scale-110 shadow-md ${
+                                  item.img === imgUrl 
+                                    ? 'border-purple-600 ring-4 ring-purple-400/50 scale-105' 
+                                    : 'border-gray-300 hover:border-purple-400'
+                                }`}
+                              >
+                                <img
+                                  src={imgUrl}
+                                  alt={`Option ${idx + 1}`}
+                                  className="w-full h-full object-cover rounded-lg"
+                                />
+                                {item.img === imgUrl && (
+                                  <div className="absolute inset-0 bg-purple-600/30 rounded-lg flex items-center justify-center">
+                                    <span className="text-white text-3xl drop-shadow-lg">✓</span>
+                                  </div>
+                                )}
+                              </button>
+                            ))}
                           </div>
-                        )}
-                        
-                        <div>
-                          <label className="flex items-center gap-2 text-sm font-bold text-gray-700 mb-2">
-                            <span>📝</span>
-                            Название
-                          </label>
-                          <input
-                            type="text"
-                            value={item.title}
-                            onChange={(e) => updateItemField(item.asin, 'title', e.target.value)}
-                            className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-4 focus:ring-purple-500/20 focus:border-purple-500 text-sm text-gray-900 font-medium bg-white shadow-md"
-                          />
                         </div>
-                        <div>
-                          <label className="flex items-center gap-2 text-sm font-bold text-gray-700 mb-2">
-                            <span>💰</span>
-                            Цена
-                          </label>
-                          <input
-                            type="text"
-                            value={item.price}
-                            onChange={(e) => updateItemField(item.asin, 'price', e.target.value)}
-                            className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-4 focus:ring-purple-500/20 focus:border-purple-500 text-sm text-gray-900 font-medium bg-white shadow-md"
-                          />
+                      )}
+                      
+                      <div>
+                        <label className="flex items-center gap-2 text-sm font-bold text-gray-700 mb-2">
+                          <span>📝</span>
+                          Название
+                        </label>
+                        <input
+                          type="text"
+                          value={item.title}
+                          onChange={(e) => updateItemField(item.asin, 'title', e.target.value)}
+                          className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-4 focus:ring-purple-500/20 focus:border-purple-500 text-sm text-gray-900 font-medium bg-white shadow-md"
+                        />
+                      </div>
+                      <div>
+                        <label className="flex items-center gap-2 text-sm font-bold text-gray-700 mb-2">
+                          <span>💰</span>
+                          Цена
+                        </label>
+                        <input
+                          type="text"
+                          value={item.price}
+                          onChange={(e) => updateItemField(item.asin, 'price', e.target.value)}
+                          className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-4 focus:ring-purple-500/20 focus:border-purple-500 text-sm text-gray-900 font-medium bg-white shadow-md"
+                        />
+                      </div>
+
+                      <div className="flex gap-2 text-xs sm:text-sm flex-wrap mb-3">
+                        <div className="px-3 py-1.5 bg-gray-100 rounded-lg font-mono text-gray-700">
+                          ASIN: {item.asin}
                         </div>
+                        <a
+                          href={item.url}
+                          target="_blank"
+                          className="px-3 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-lg font-semibold transition-colors flex items-center gap-1"
+                        >
+                          <span>🔗</span>
+                          Amazon
+                        </a>
+                      </div>
+
+                      {/* Кнопки действия для товара */}
+                      {changedItems.has(item.asin) && (
                         <div className="flex gap-2 flex-wrap">
                           <button
                             onClick={saveItems}
                             disabled={saving}
-                            className="flex-1 px-4 py-3 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white rounded-xl text-sm font-bold transition-all disabled:opacity-50 shadow-lg hover:shadow-xl transform hover:scale-105 flex items-center justify-center gap-2"
+                            className="flex-1 px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white rounded-lg text-xs sm:text-sm font-bold transition-all disabled:opacity-50 shadow-lg hover:shadow-xl transform hover:scale-105 flex items-center justify-center gap-2"
                           >
                             <span>✓</span>
                             Сохранить
                           </button>
                           <button
                             onClick={() => {
-                              setEditingItem(null)
                               setTempItems(wishlist.items)
-                              // Очищаем альтернативные изображения
+                              setChangedItems(new Set())
                               setAlternativeImages(prev => {
                                 const newImages = { ...prev }
                                 delete newImages[item.asin]
@@ -710,64 +927,75 @@ export default function EditWishlist({ wishlistId }: Props) {
                               })
                             }}
                             disabled={saving}
-                            className="flex-1 px-4 py-3 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-xl text-sm font-bold transition-all shadow-lg transform hover:scale-105"
+                            className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg text-xs sm:text-sm font-bold transition-all shadow-lg transform hover:scale-105"
                           >
-                            ✕ Отмена
+                            ✕
                           </button>
                         </div>
-                      </div>
-                    ) : (
-                      <>
-                        <h3 className="font-bold text-gray-900 mb-2 line-clamp-3 text-base sm:text-lg leading-snug">
-                          {item.title}
-                        </h3>
-                        <p className="text-xl sm:text-2xl font-black bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent mb-3">
-                          {item.price}
-                        </p>
-                        <div className="flex gap-3 text-xs sm:text-sm flex-wrap mb-3">
-                          <div className="px-3 py-1.5 bg-gray-100 rounded-lg font-mono text-gray-700">
-                            ASIN: {item.asin}
-                          </div>
-                          <a
-                            href={item.url}
-                            target="_blank"
-                            className="px-3 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-lg font-semibold transition-colors flex items-center gap-1"
-                          >
-                            <span>🔗</span>
-                            Amazon
-                          </a>
-                        </div>
-                      </>
-                    )}
+                      )}
+                    </div>
                   </div>
 
                   {/* Действия */}
-                  {editingItem !== item.asin && (
-                    <div className="flex sm:flex-col gap-2">
-                      <button
-                        onClick={() => setEditingItem(item.asin)}
-                        className="flex-1 sm:flex-none px-4 py-2 text-indigo-700 hover:bg-indigo-50 rounded-xl text-sm font-bold transition-all border-2 border-indigo-200 hover:border-indigo-300 shadow-md hover:shadow-lg transform hover:scale-105 flex items-center justify-center gap-2"
-                      >
-                        <span>✏️</span>
-                        Править
-                      </button>
-                      <button
-                        onClick={() => deleteItem(item.asin)}
-                        disabled={saving}
-                        className="flex-1 sm:flex-none px-4 py-2 text-red-700 hover:bg-red-50 rounded-xl text-sm font-bold transition-all disabled:opacity-50 border-2 border-red-200 hover:border-red-300 shadow-md hover:shadow-lg transform hover:scale-105 flex items-center justify-center gap-2"
-                      >
-                        <span>🗑️</span>
-                        Удалить
-                      </button>
-                    </div>
-                  )}
+                  <div className="flex sm:flex-col gap-2">
+                    <button
+                      onClick={() => loadAlternativeImages(item.asin, item.url)}
+                      disabled={loadingImages === item.asin}
+                      className="flex-1 sm:flex-none px-4 py-2 bg-gradient-to-r from-purple-100 to-pink-100 hover:from-purple-200 hover:to-pink-200 text-purple-700 rounded-xl text-sm font-bold transition-all disabled:opacity-50 shadow-md hover:shadow-lg transform hover:scale-105 flex items-center justify-center gap-2"
+                      title="Загрузить альтернативные изображения"
+                    >
+                      {loadingImages === item.asin ? (
+                        <>
+                          <div className="w-4 h-4 border-2 border-purple-600 border-t-transparent rounded-full animate-spin"></div>
+                          <span className="hidden sm:inline text-xs">...</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>🖼️</span>
+                          <span className="hidden sm:inline text-xs">Фото</span>
+                        </>
+                      )}
+                    </button>
+                    <button
+                      onClick={() => deleteItem(item.asin)}
+                      disabled={saving}
+                      className="flex-1 sm:flex-none px-4 py-2 text-red-700 hover:bg-red-50 rounded-xl text-sm font-bold transition-all disabled:opacity-50 border-2 border-red-200 hover:border-red-300 shadow-md hover:shadow-lg transform hover:scale-105 flex items-center justify-center gap-2"
+                    >
+                      <span>🗑️</span>
+                      <span className="hidden sm:inline text-xs">Удалить</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             ))}
+            
+            {/* Save all changes button */}
+            {changedItems.size > 0 && (
+              <button
+                onClick={() => saveAllItems()}
+                disabled={saving}
+                className="mt-6 w-full px-6 py-3 bg-gradient-to-r from-green-400 to-emerald-400 hover:from-green-500 hover:to-emerald-500 text-white rounded-xl text-base font-bold transition-all disabled:opacity-50 shadow-lg hover:shadow-xl transform hover:scale-105 flex items-center justify-center gap-2"
+              >
+                {saving ? (
+                  <>
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    Сохраняю...
+                  </>
+                ) : (
+                  <>
+                    <span>💾</span>
+                    Сохранить все изменения
+                  </>
+                )}
+              </button>
+            )}
           </div>
         )}
       </div>
-    </div>
+      </div>
+      </div>
     </div>
   )
 }
+
+

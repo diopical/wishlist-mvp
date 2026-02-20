@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import axios from 'axios'
 import * as cheerio from 'cheerio'
 import { customAlphabet } from 'nanoid/non-secure'
+import { resolveShortUrl, getAmazonHeaders } from '@/lib/resolve-short-url'
 
 // Генератор уникальных коротких ID для вишлистов
 const nanoid = customAlphabet('0123456789abcdef', 8)
@@ -55,41 +56,63 @@ export async function POST(req: NextRequest) {
     const seenAsins = new Set<string>() // Для отслеживания дубликатов
 
     // Обрабатываем каждый URL
-    for (const url of urls) {
+    for (const urlToparse of urls) {
       try {
+        console.log(`🔗 Обработка URL: ${urlToparse}`)
+
+        // 🔗 Разрешаем короткие ссылки перед парсингом
+        const resolvedUrl = await resolveShortUrl(urlToparse)
+
         // Получаем HTML страницы Amazon
-        const { data: html } = await axios.get(url, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-          },
+        const { data: html } = await axios.get(resolvedUrl, {
+          headers: getAmazonHeaders(),
           timeout: 15000
         })
 
         const $ = cheerio.load(html)
 
-        // Извлекаем все ссылки на товары из вишлиста
-        let productUrls = $(
-          '.a-carousel-viewport a[href*="/dp/"], a[href*="/gp/product/"], .a-link-normal[href*="/dp/"], a[data-asin]'
-        )
-          .map((_, el) => {
-            let href = $(el).attr('href') || $(el).attr('data-href')
-            if (!href?.includes('http')) {
-              href = `https://www.amazon.ae${href || ''}`
-            }
-            return href?.includes('/dp/') ? href : null
-          })
-          .get()
-          .filter(Boolean)
+        // 🔍 Определяем тип входящего URL: прямая ссылка на товар или вишлист?
+        // Проверяем ПОСЛЕ разрешения, чтобы это работало и для коротких ссылок
+        const inputAsin = resolvedUrl.match(/dp\/([A-Z0-9]{10})/)?.[1]
+        const isProductUrl = !!inputAsin
 
-        // Fallback: если это страница одного товара
-        if (productUrls.length === 0) {
-          const asin = url.match(/dp\/([A-Z0-9]{10})/)?.[1]
-          if (asin) {
-            productUrls = [`${url.includes('amazon.') ? url : `https://www.amazon.ae/dp/${asin}`}`]
+        console.log(`📦 Тип: ${isProductUrl ? 'ТОВАР (' + inputAsin + ')' : 'ВИШЛИСТ'}`)
+
+        let productUrls: string[] = []
+
+        // 📦 Если это ПРЯМАЯ ссылка на товар - парсим ТОЛЬКО этот товар
+        if (isProductUrl) {
+          const domain = resolvedUrl.includes('amazon.') ? new URL(resolvedUrl).hostname : 'amazon.ae'
+          productUrls = [`https://${domain}/dp/${inputAsin}`]
+          console.log(`✅ Прямая ссылка на товар, парсим только: ${inputAsin}`)
+        }
+        // 🛒 Если это ВИШЛИСТ - ищем ВСЕ товары в нём
+        else {
+          productUrls = $(
+            '.a-carousel-viewport a[href*="/dp/"], a[href*="/gp/product/"], .a-link-normal[href*="/dp/"], a[data-asin]'
+          )
+            .map((_, el) => {
+              let href = $(el).attr('href') || $(el).attr('data-href')
+              if (!href?.includes('http')) {
+                const domain = resolvedUrl.includes('amazon.') ? new URL(resolvedUrl).hostname : 'amazon.ae'
+                href = `https://${domain}${href || ''}`
+              }
+              return href?.includes('/dp/') ? href : null
+            })
+            .get()
+            .filter(Boolean)
+
+          // Fallback: если это страница вишлиста с одним товаром
+          if (productUrls.length === 0) {
+            const asin = resolvedUrl.match(/dp\/([A-Z0-9]{10})/)?.[1]
+            if (asin) {
+              const domain = resolvedUrl.includes('amazon.') ? new URL(resolvedUrl).hostname : 'amazon.ae'
+              productUrls = [`https://${domain}/dp/${asin}`]
+            }
           }
         }
 
-        console.log(`🛒 URL: ${url}, найдено товаров: ${productUrls.length}`)
+        console.log(`🛒 URL: ${urlToparse}, найдено товаров: ${productUrls.length}`)
 
       // Парсим каждый товар (максимум 100)
       for (const productUrl of productUrls.slice(0, 100)) {
@@ -98,9 +121,7 @@ export async function POST(req: NextRequest) {
         try {
           // Получаем страницу товара
           const { data: productHtml } = await axios.get(productUrl, {
-            headers: {
-              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-            },
+            headers: getAmazonHeaders(),
             timeout: 10000
           })
 
@@ -220,7 +241,7 @@ export async function POST(req: NextRequest) {
         }
       }
       } catch (urlError: any) {
-        console.error(`❌ Ошибка загрузки URL ${url}: ${urlError.message}`)
+        console.error(`❌ Ошибка загрузки URL ${urlToparse}: ${urlError.message}`)
         // Продолжаем со следующим URL вместо возврата ошибки
       }
     }

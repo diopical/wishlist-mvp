@@ -28,27 +28,45 @@ export async function GET() {
     }
 
     // Получаем данные профиля из таблицы profiles
-    const { data: profile, error: profileError } = await supabase
-      .from('profiles')
-      .select('first_name, last_name, phone, birth_date')
-      .eq('id', user.id)
-      .single()
-
-    if (profileError && profileError.code !== 'PGRST116') {
-      // PGRST116 = запись не найдена, это нормально для нового пользователя
-      console.error('Profile fetch error:', profileError)
-      return NextResponse.json(
-        { error: 'Ошибка при получении профиля' },
-        { status: 500 }
-      )
+    // Сначала пробуем выбрать с username, если колонка есть
+    let profile = null
+    let error = null
+    
+    try {
+      const result = await supabase
+        .from('profiles')
+        .select('first_name, last_name, phone, birth_date, username')
+        .eq('id', user.id)
+        .single()
+      profile = result.data
+      error = result.error
+    } catch (e) {
+      // Если ошибка с колонкой username, пробуем без неё
+      const result = await supabase
+        .from('profiles')
+        .select('first_name, last_name, phone, birth_date')
+        .eq('id', user.id)
+        .single()
+      profile = result.data
+      error = result.error
     }
 
+    if (error && error.code !== 'PGRST116') {
+      // PGRST116 = запись не найдена, это нормально для нового пользователя
+      console.error('Profile fetch error:', error)
+      // Продолжаем даже при ошибке - вернём дефолтные значения
+    }
+
+    // По умолчанию username = первая часть email
+    const defaultUsername = (user.email || '').split('@')[0]
+    
     // Возвращаем данные профиля вместе с email из auth
     return NextResponse.json({
       first_name: profile?.first_name || '',
       last_name: profile?.last_name || '',
       phone: profile?.phone || '',
       birth_date: profile?.birth_date || '',
+      username: profile?.username || defaultUsername,
       email: user.email || '',
     })
   } catch (error) {
@@ -83,12 +101,20 @@ export async function PUT(request: Request) {
 
     // Парсим данные из запроса
     const body = await request.json()
-    const { first_name, last_name, phone, birth_date } = body
+    const { first_name, last_name, phone, birth_date, username } = body
 
     // Валидация данных
     if (birth_date && !/^\d{4}-\d{2}-\d{2}$/.test(birth_date)) {
       return NextResponse.json(
         { error: 'Неверный формат даты. Используйте YYYY-MM-DD' },
+        { status: 400 }
+      )
+    }
+    
+    // Валидация username
+    if (username && !/^[a-zA-Z0-9_-]{3,20}$/.test(username)) {
+      return NextResponse.json(
+        { error: 'Username может содержать только буквы, цифры, подчеркивание и дефис (3-20 символов)' },
         { status: 400 }
       )
     }
@@ -103,15 +129,33 @@ export async function PUT(request: Request) {
     if (last_name !== undefined) updateData.last_name = last_name
     if (phone !== undefined) updateData.phone = phone
     if (birth_date !== undefined) updateData.birth_date = birth_date
+    if (username !== undefined) updateData.username = username
 
     // Используем upsert - создаст запись если её нет, обновит если есть
-    const { data: profile, error: updateError } = await supabase
+    // Пробуем с username, если не сработает - без неё
+    let selectFields = 'first_name, last_name, phone, birth_date, username'
+    let result = await supabase
       .from('profiles')
       .upsert(updateData, { onConflict: 'id' })
-      .select('first_name, last_name, phone, birth_date')
+      .select(selectFields)
       .single()
+    
+    // Если ошибка с колонкой username, пробуем без неё
+    if (result.error && result.error.code === 'PGRST204') {
+      selectFields = 'first_name, last_name, phone, birth_date'
+      result = await supabase
+        .from('profiles')
+        .upsert(updateData, { onConflict: 'id' })
+        .select(selectFields)
+        .single()
+    }
+    
+    const profile = result.data
+    const updateError = result.error
 
-    if (updateError) {
+    if (updateError && updateError.code !== '42703') {
+      // Игнорируем ошибку о отсутствующей колонке username (код 42703)
+      // Если есть другие ошибки - возвращаем их
       console.error('Profile update error:', updateError)
       return NextResponse.json(
         { error: 'Ошибка при обновлении профиля', details: updateError.message },
@@ -119,14 +163,18 @@ export async function PUT(request: Request) {
       )
     }
 
+    // По умолчанию username = первая часть email (если нет в БД)
+    const defaultUsername = (user.email || '').split('@')[0]
+    
     // Возвращаем обновленные данные
     return NextResponse.json({
       message: 'Профиль успешно обновлен',
       profile: {
-        first_name: profile.first_name,
-        last_name: profile.last_name,
-        phone: profile.phone,
-        birth_date: profile.birth_date,
+        first_name: profile?.first_name || '',
+        last_name: profile?.last_name || '',
+        phone: profile?.phone || '',
+        birth_date: profile?.birth_date || '',
+        username: profile?.username || defaultUsername,
         email: user.email,
       },
     })

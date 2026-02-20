@@ -76,7 +76,7 @@ export async function PUT(
     }
 
     const body = await req.json()
-    const { destination, items } = body
+    const { destination, items, require_name_for_reserve, custom_short_id } = body
 
     // Подготавливаем объект для обновления
     const updateData: any = {}
@@ -87,6 +87,12 @@ export async function PUT(
     }
     if (items !== undefined) {
       updateData.items = items
+    }
+    if (require_name_for_reserve !== undefined) {
+      updateData.require_name_for_reserve = require_name_for_reserve
+    }
+    if (custom_short_id !== undefined) {
+      updateData.custom_short_id = custom_short_id
     }
 
     // Проверяем, что есть что обновлять

@@ -35,6 +35,13 @@ export async function POST(req: NextRequest) {
         // 🔗 Разрешаем короткие ссылки перед парсингом
         const resolvedUrl = await resolveShortUrl(url)
         
+        // 🔍 Определяем тип входящего URL: прямая ссылка на товар или вишлист?
+        // Проверяем ПОСЛЕ разрешения, чтобы это работало и для коротких ссылок
+        const inputAsin = resolvedUrl.match(/dp\/([A-Z0-9]{10})/)?.[1]
+        const isProductUrl = !!inputAsin
+        
+        parserLogger.info(`URL тип: ${isProductUrl ? 'ТОВАР (' + inputAsin + ')' : 'ВИШЛИСТ'}`)
+        
         const { data: html } = await axios.get(resolvedUrl, {
           headers: getAmazonHeaders(),
           timeout: 15000
@@ -42,36 +49,45 @@ export async function POST(req: NextRequest) {
         
         const $ = cheerio.load(html)
 
-        // 🛒 Wishlist → ВСЕ product ссылки (специфичные селекторы для wishlist)
-        // Ищем товары только в основном контенте вишлиста, не в рекомендациях
-        let productUrls = $(
-          // Товары в основном вишлисте
-          '[data-item-index] a[href*="/dp/"], ' +
-          '.g-item-sortable a[href*="/dp/"], ' +
-          // Карусель товаров  
-          '.a-carousel-viewport a[href*="/dp/"], ' +
-          // Fallback для других страниц товаров
-          'main a[href*="/dp/"]'
-        )
-          .not('[data-component-type="s-search-result"]') // Исключаем результаты поиска
-          .not('.g-show-more-list a') // Исключаем "показать еще"
-          .not('[data-feature-name="dp_feature_div"]') // Исключаем связанные товары
-          .map((_, el) => {
-          let href = $(el).attr('href') || $(el).attr('data-href')
-          if (!href?.includes('http')) {
-            // Получаем домен из разрешенного URL
-            const domain = resolvedUrl.includes('amazon.') ? new URL(resolvedUrl).hostname : 'amazon.ae'
-            href = `https://${domain}${href || ''}`
-          }
-          return href?.includes('/dp/') ? href : null
-        }).get().filter(Boolean)
+        let productUrls: string[] = []
 
-        // 📱 Product page fallback
-        if (productUrls.length === 0) {
-          const asin = resolvedUrl.match(/dp\/([A-Z0-9]{10})/)?.[1]
-          if (asin) {
-            const domain = resolvedUrl.includes('amazon.') ? new URL(resolvedUrl).hostname : 'amazon.ae'
-            productUrls = [`https://${domain}/dp/${asin}`]
+        // 📦 Если это ПРЯМАЯ ссылка на товар - парсим ТОЛЬКО этот товар
+        if (isProductUrl) {
+          const domain = resolvedUrl.includes('amazon.') ? new URL(resolvedUrl).hostname : 'amazon.ae'
+          productUrls = [`https://${domain}/dp/${inputAsin}`]
+          parserLogger.info(`Прямая ссылка на товар, парсим только: ${inputAsin}`)
+        }
+        // 🛒 Если это ВИШЛИСТ - ищем ВСЕ товары в нём
+        else {
+          productUrls = $(
+            // Товары в основном вишлисте
+            '[data-item-index] a[href*="/dp/"], ' +
+            '.g-item-sortable a[href*="/dp/"], ' +
+            // Карусель товаров  
+            '.a-carousel-viewport a[href*="/dp/"], ' +
+            // Fallback для других страниц товаров
+            'main a[href*="/dp/"]'
+          )
+            .not('[data-component-type="s-search-result"]') // Исключаем результаты поиска
+            .not('.g-show-more-list a') // Исключаем "показать еще"
+            .not('[data-feature-name="dp_feature_div"]') // Исключаем связанные товары
+            .map((_, el) => {
+            let href = $(el).attr('href') || $(el).attr('data-href')
+            if (!href?.includes('http')) {
+              // Получаем домен из разрешенного URL
+              const domain = resolvedUrl.includes('amazon.') ? new URL(resolvedUrl).hostname : 'amazon.ae'
+              href = `https://${domain}${href || ''}`
+            }
+            return href?.includes('/dp/') ? href : null
+          }).get().filter(Boolean)
+
+          // 📱 Product page fallback для вишлиста
+          if (productUrls.length === 0) {
+            const asin = resolvedUrl.match(/dp\/([A-Z0-9]{10})/)?.[1]
+            if (asin) {
+              const domain = resolvedUrl.includes('amazon.') ? new URL(resolvedUrl).hostname : 'amazon.ae'
+              productUrls = [`https://${domain}/dp/${asin}`]
+            }
           }
         }
 

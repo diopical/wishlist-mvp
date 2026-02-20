@@ -11,6 +11,7 @@ interface ProfileData {
   last_name: string
   phone: string
   birth_date: string
+  username: string
   email: string
 }
 
@@ -33,6 +34,7 @@ export default function ProfileForm() {
     last_name: '',
     phone: '',
     birth_date: '',
+    username: '',
     email: '',
   })
 
@@ -100,6 +102,7 @@ export default function ProfileForm() {
           last_name: formData.last_name,
           phone: formData.phone,
           birth_date: formData.birth_date,
+          username: formData.username,
         }),
       })
 
@@ -195,7 +198,27 @@ export default function ProfileForm() {
             </p>
           </div>
 
-          {/* Имя */}
+          {/* Username для публичной ссылки */}
+          <div>
+            <label htmlFor="username" className="block text-sm font-semibold text-gray-800 mb-2">
+              🔗 Username для публичных вишлистов
+            </label>
+            <input
+              type="text"
+              id="username"
+              name="username"
+              value={formData.username}
+              onChange={handleChange}
+              placeholder="ваше_имя"
+              className="w-full px-4 py-3 border-2 border-blue-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition bg-white text-gray-900 placeholder-gray-400 font-medium shadow-sm hover:border-blue-300"
+              pattern="^[a-zA-Z0-9_-]{3,20}$"
+              title="Только буквы, цифры, подчеркивание и дефис (3-20 символов)"
+              maxLength={20}
+            />
+            <p className="mt-2 text-sm text-gray-600">
+              💡 Используется в публичных ссылках: example.com/w/{formData.username}/wishlist
+            </p>
+          </div>
           <div>
             <label htmlFor="first_name" className="block text-sm font-semibold text-gray-800 mb-2">
               👤 Имя
