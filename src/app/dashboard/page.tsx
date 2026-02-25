@@ -24,7 +24,18 @@ export default async function Dashboard() {
     .eq('user_id', user.id)
     .order('created_at', { ascending: false })
 
-  const wishList = wishes || []
+  // Загружаем профиль пользователя для получения username
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('username')
+    .eq('user_id', user.id)
+    .single()
+
+  // Добавляем username к каждому вишлисту
+  const wishList = (wishes || []).map(wish => ({
+    ...wish,
+    username: profile?.username
+  }))
 
   // Рендерим клиентский компонент с данными
   return <DashboardContent wishlists={wishList} userEmail={user.email || ''} />

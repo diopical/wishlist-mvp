@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 const supabase = createClient(supabaseUrl, supabaseKey)
 
 /**
@@ -49,20 +49,16 @@ export async function POST(
         .eq('username', usernameParam)
         .single()
 
-      if (!profile) {
-        return NextResponse.json(
-          { error: 'Пользователь не найден' },
-          { status: 404 }
-        )
+      if (profile) {
+        userId = profile.id
       }
-      userId = profile.id
     }
 
     // Получаем текущий вишлист
     let query = supabase
       .from('wishes')
       .select('items, require_name_for_reserve, user_id')
-      .eq('short_id', short_id)
+      .or(`short_id.eq.${short_id},custom_short_id.eq.${short_id}`)
 
     if (userId) {
       query = query.eq('user_id', userId)
@@ -86,8 +82,15 @@ export async function POST(
     }
 
     // Обновляем статус резервирования товара по ASIN
+    // Если товар уже зарезервирован - снимаем резервацию (toggle)
     const updatedItems = (wishlist.items || []).map((item: any) => {
       if (item.asin === asin) {
+        // Toggle: если уже зарезервировано - снимаем резервацию
+        if (item.reserved) {
+          const { reserved, reserved_by, reserved_at, ...rest } = item
+          return rest
+        }
+        // Иначе резервируем
         return {
           ...item,
           reserved: true,
@@ -102,7 +105,7 @@ export async function POST(
     const { error: updateError } = await supabase
       .from('wishes')
       .update({ items: updatedItems })
-      .eq('short_id', short_id)
+      .or(`short_id.eq.${short_id},custom_short_id.eq.${short_id}`)
 
     if (updateError) {
       console.error('Ошибка обновления резервирования:', updateError)
@@ -112,12 +115,17 @@ export async function POST(
       )
     }
 
+    // Проверяем, была ли это операция резервирования или снятия резервации
+    const updatedItem = updatedItems.find((item: any) => item.asin === asin)
+    const wasReserved = updatedItem?.reserved
+
     // Возвращаем обновленный список товаров
     return NextResponse.json({
       success: true,
       asin,
-      reserved_by: name,
-      message: 'Товар успешно зарезервирован'
+      reserved: wasReserved,
+      reserved_by: wasReserved ? name : null,
+      message: wasReserved ? 'Товар успешно зарезервирован' : 'Резервация снята'
     })
 
   } catch (error: any) {

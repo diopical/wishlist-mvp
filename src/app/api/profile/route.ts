@@ -66,7 +66,7 @@ export async function GET() {
       last_name: profile?.last_name || '',
       phone: profile?.phone || '',
       birth_date: profile?.birth_date || '',
-      username: profile?.username || defaultUsername,
+      username: (profile as any)?.username || defaultUsername,
       email: user.email || '',
     })
   } catch (error) {
@@ -170,11 +170,11 @@ export async function PUT(request: Request) {
     return NextResponse.json({
       message: 'Профиль успешно обновлен',
       profile: {
-        first_name: profile?.first_name || '',
-        last_name: profile?.last_name || '',
-        phone: profile?.phone || '',
-        birth_date: profile?.birth_date || '',
-        username: profile?.username || defaultUsername,
+        first_name: (profile as any)?.first_name || '',
+        last_name: (profile as any)?.last_name || '',
+        phone: (profile as any)?.phone || '',
+        birth_date: (profile as any)?.birth_date || '',
+        username: (profile as any)?.username || defaultUsername,
         email: user.email,
       },
     })

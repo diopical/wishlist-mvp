@@ -21,6 +21,7 @@ interface WishlistItem {
 interface Wishlist {
   id: string
   short_id: string
+  custom_short_id?: string
   destination: string
   items: WishlistItem[]
   created_at: string
@@ -125,7 +126,7 @@ export default function EditWishlist({ wishlistId }: Props) {
     }
 
     // Валидация формата
-    if (!/^[a-zA-Z0-9_-]{3,20}$/.test(value)) {
+    if (!/^[a-zA-Z0-9_\-]{3,20}$/.test(value)) {
       setShortIdError('Может содержать буквы, цифры, подчеркивание и дефис (3-20 символов)')
       return false
     }
@@ -201,15 +202,28 @@ export default function EditWishlist({ wishlistId }: Props) {
         body: JSON.stringify(updateData),
       })
 
+      const data = await response.json()
+      console.log('API Response:', { status: response.status, data })
+
       if (!response.ok) {
-        throw new Error('Не удалось обновить настройки')
+        const errorMsg = data.error || data.message || data.details || 'Не удалось обновить настройки'
+        console.error('API Error:', errorMsg)
+        throw new Error(errorMsg)
       }
 
-      const data = await response.json()
-      setWishlist(data.wishlist)
+      const updatedWishlist = data.wishlist
+      
+      // Обновляем основной объект вишлиста
+      setWishlist(updatedWishlist)
+      
+      // Обновляем локальные состояния чтобы отразить сохранённые значения
+      setCustomShortId(updatedWishlist.custom_short_id || '')
+      setRequireNameForReserve(updatedWishlist.require_name_for_reserve || false)
+      
       setMessage({ type: 'success', text: 'Настройки обновлены!' })
       setTimeout(() => setMessage(null), 3000)
     } catch (error: any) {
+      console.error('Error saving settings:', error)
       setMessage({ type: 'error', text: error.message })
     } finally {
       setSaving(false)
@@ -656,7 +670,7 @@ export default function EditWishlist({ wishlistId }: Props) {
                     className={`w-full px-4 py-3 border-2 rounded-xl focus:ring-2 focus:ring-blue-500 transition bg-white text-gray-900 placeholder-gray-400 font-medium shadow-sm ${
                       shortIdError ? 'border-red-400' : 'border-blue-200'
                     }`}
-                    pattern="^[a-zA-Z0-9_-]{3,20}$"
+                    pattern="^[a-zA-Z0-9_\-]{3,20}$"
                     maxLength={20}
                   />
                   {shortIdError && (
@@ -701,6 +715,7 @@ export default function EditWishlist({ wishlistId }: Props) {
               )}
             </div>
         </div>
+      </div>
       </div>
 
       {/* Форма добавления новых товаров */}
@@ -992,10 +1007,7 @@ export default function EditWishlist({ wishlistId }: Props) {
           </div>
         )}
       </div>
-      </div>
-      </div>
+    </div>
     </div>
   )
 }
-
-

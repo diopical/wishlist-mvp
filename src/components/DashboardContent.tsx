@@ -15,6 +15,9 @@ interface Wishlist {
   created_at: string
   event_type?: string
   event_date?: string
+  custom_short_id?: string
+  username?: string
+  require_name_for_reserve?: boolean
 }
 
 interface Props {
@@ -31,6 +34,59 @@ interface Props {
  */
 export default function DashboardContent({ wishlists, userEmail }: Props) {
   const router = useRouter()
+
+  /**
+   * Генерирует публичную ссылку для вишлиста (относительный путь)
+   * Всегда используем /share/ формат для единообразия
+   */
+  const getPublicUrl = (wishlist: Wishlist): string => {
+    // Если есть username и custom_short_id, используем их
+    if (wishlist.username && wishlist.custom_short_id) {
+      return `/share/${wishlist.username}/${wishlist.custom_short_id}`
+    }
+    
+    // Если есть только username, используем username + short_id
+    if (wishlist.username) {
+      return `/share/${wishlist.username}/${wishlist.short_id}`
+    }
+    
+    // Если нет username, используем только short_id через /share/
+    return `/share/${wishlist.custom_short_id || wishlist.short_id}`
+  }
+
+  /**
+   * Обработка действия "Поделиться"
+   */
+  const handleShare = async (wishlist: Wishlist) => {
+    const url = window.location.origin + getPublicUrl(wishlist)
+    const shareData = {
+      title: wishlist.destination || 'Мой вишлист',
+      text: `Посмотрите мой вишлист "${wishlist.destination}"!`,
+      url: url
+    }
+
+    try {
+      // Проверяем поддержку Web Share API
+      if (navigator.share && navigator.canShare && navigator.canShare(shareData)) {
+        await navigator.share(shareData)
+      } else {
+        // Fallback - копируем в буфер обмена
+        await navigator.clipboard.writeText(url)
+        alert('Ссылка скопирована в буфер обмена!')
+      }
+    } catch (error) {
+      // Пользователь отменил или произошла ошибка
+      if ((error as Error).name !== 'AbortError') {
+        // Пробуем просто скопировать в буфер обмена
+        try {
+          await navigator.clipboard.writeText(url)
+          alert('Ссылка скопирована в буфер обмена!')
+        } catch (clipboardError) {
+          console.error('Share error:', error)
+        }
+      }
+    }
+  }
 
   const handleDeleteWishlist = async (id: string, name: string) => {
     if (!confirm(`Вы уверены? Вишлист "${name}" будет удален безвозвратно!`)) {
@@ -185,25 +241,48 @@ export default function DashboardContent({ wishlists, userEmail }: Props) {
                     </div>
 
                     {/* Кнопки действий */}
-                    <div className="flex gap-2 sm:gap-3">
+                    <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
                       <button
                         onClick={() => router.push(`/wishlists/${wishlist.id}`)}
-                        className="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white py-3 px-4 rounded-2xl text-center transition-all font-bold shadow-lg hover:shadow-xl transform hover:scale-105 flex items-center justify-center gap-2 text-sm"
+                        className="flex-1 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-700 hover:to-purple-700 text-white py-3 px-3 rounded-2xl text-center transition-all font-bold shadow-lg hover:shadow-xl transform hover:scale-105 flex items-center justify-center gap-2 text-sm"
+                        title="Редактировать вишлист"
                       >
                         <span>✏️</span>
-                        <span className="hidden sm:inline">Править</span>
+                        <span className="hidden md:inline">Править</span>
                       </button>
                       <a
-                        href={`/w/${wishlist.short_id}`}
+                        href={getPublicUrl(wishlist)}
                         target="_blank"
-                        className="flex-1 bg-gradient-to-r from-pink-500 to-orange-500 hover:from-pink-600 hover:to-orange-600 text-white py-3 px-4 rounded-2xl text-center transition-all font-bold shadow-lg hover:shadow-xl transform hover:scale-105 flex items-center justify-center gap-2 text-sm"
+                        rel="noopener noreferrer"
+                        className="flex-1 bg-gradient-to-r from-pink-500 to-orange-500 hover:from-pink-600 hover:to-orange-600 text-white py-3 px-3 rounded-2xl text-center transition-all font-bold shadow-lg hover:shadow-xl transform hover:scale-105 flex items-center justify-center gap-2 text-sm"
+                        title="Открыть публичную ссылку"
                       >
                         <span>🚀</span>
-                        <span className="hidden sm:inline">Открыть</span>
+                        <span className="hidden md:inline">Открыть</span>
                       </a>
                       <button
+                        onClick={() => handleShare(wishlist)}
+                        className="flex-1 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white py-3 px-3 rounded-2xl transition-all font-bold shadow-lg hover:shadow-xl transform hover:scale-105 flex items-center justify-center text-sm"
+                        title="Поделиться ссылкой"
+                      >
+                        <svg 
+                          xmlns="http://www.w3.org/2000/svg" 
+                          className="h-5 w-5" 
+                          fill="none" 
+                          viewBox="0 0 24 24" 
+                          stroke="currentColor" 
+                          strokeWidth={2}
+                        >
+                          <path 
+                            strokeLinecap="round" 
+                            strokeLinejoin="round" 
+                            d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z" 
+                          />
+                        </svg>
+                      </button>
+                      <button
                         onClick={() => handleDeleteWishlist(wishlist.id, wishlist.destination)}
-                        className="bg-red-500/20 hover:bg-red-500 text-red-700 hover:text-white py-3 px-4 rounded-2xl transition-all font-bold shadow-lg hover:shadow-xl transform hover:scale-105 flex items-center justify-center text-sm"
+                        className="bg-gradient-to-r from-red-500/80 to-orange-500/80 hover:from-red-600 hover:to-orange-600 text-white py-3 px-3 rounded-2xl transition-all font-bold shadow-lg hover:shadow-xl transform hover:scale-105 flex items-center justify-center text-sm"
                         title="Удалить вишлист"
                       >
                         <span>🗑️</span>

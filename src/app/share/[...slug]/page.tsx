@@ -100,8 +100,8 @@ export default function PublicWishlist() {
       return
     }
 
-    // Определяем имя резервирующего
-    const name = (requireNameForReserve && !isCurrentlyReserved) ? (userName || '') : 'Anonymous'
+    // Определяем имя резервирующего (для снятия резервации имя не важно)
+    const name = isCurrentlyReserved ? '' : ((requireNameForReserve) ? (userName || '') : 'Anonymous')
 
     const reserveUrl = username
       ? `/api/wishlists/public/${shortId}/reserve?username=${encodeURIComponent(username)}`
@@ -124,20 +124,29 @@ export default function PublicWishlist() {
         return
       }
 
-      // Обновляем состояние товаров
-      const updatedItems = items.map((item, idx) =>
-        idx === index
-          ? {
+      // Обновляем состояние товаров на основе ответа API
+      const updatedItems = items.map((item, idx) => {
+        if (idx === index) {
+          if (data.reserved) {
+            // Зарезервировано
+            return {
               ...item,
               reserved: true,
-              reserved_by: name,
+              reserved_by: data.reserved_by,
               reserved_at: new Date().toISOString()
             }
-          : item
-      )
+          } else {
+            // Резервация снята
+            const { reserved, reserved_by, reserved_at, ...rest } = item
+            return rest
+          }
+        }
+        return item
+      })
       setItems(updatedItems)
       setShowNameInput(false)
       setUserName('')
+      setPendingIndex(null)
     } catch (error) {
       console.error('Ошибка при резервировании:', error)
       alert('Техническая ошибка при резервировании')
@@ -230,7 +239,7 @@ export default function PublicWishlist() {
           {items.map((item, index) => (
             <div
               key={item.asin}
-              className={`rounded-2xl shadow-lg overflow-hidden transition-all transform hover:scale-105 ${
+              className={`flex flex-col rounded-2xl shadow-lg overflow-hidden transition-all transform hover:scale-105 ${
                 item.reserved
                   ? 'bg-gray-100 border-2 border-gray-300 opacity-75'
                   : 'bg-white border-2 border-transparent hover:border-blue-300'
@@ -263,34 +272,57 @@ export default function PublicWishlist() {
               </div>
 
               {/* Информация о товаре */}
-              <div className="p-4">
-                <a
-                  href={item.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-blue-600 hover:underline font-semibold line-clamp-2"
-                >
+              <div className="p-4 flex flex-col flex-grow">
+                <h3 className="font-semibold line-clamp-2 text-gray-900 mb-2">
                   {item.title}
-                </a>
+                </h3>
 
-                <p className="text-lg font-bold text-gray-900 my-2">{item.price}</p>
+                <p className="text-lg font-bold text-gray-900 mb-3">{item.price}</p>
 
                 {/* Информация о резервировании */}
                 {item.reserved && item.reserved_by && (
-                  <p className="text-sm text-gray-600 mb-4">
+                  <p className="text-sm text-gray-600 mb-3 p-2 bg-gray-100 rounded-lg">
                     Зарезервировано: <strong>{item.reserved_by}</strong>
                   </p>
                 )}
 
-                {/* Кнопка */}
-                {!item.reserved && (
+                {/* Кнопки действий */}
+                <div className="flex flex-col gap-2 mt-auto">
+                  {/* Кнопка для магазина */}
+                  <a
+                    href={item.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white font-semibold rounded-xl hover:shadow-lg transition transform hover:scale-105 flex items-center justify-center gap-2 text-sm"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4m-4-6l6 6m0 0l-6 6m6-6H3" />
+                    </svg>
+                    <span>Смотреть</span>
+                  </a>
+
+                  {/* Кнопка резервирования */}
                   <button
                     onClick={() => toggleReserve(item.asin, index)}
-                    className="w-full px-4 py-3 bg-gradient-to-r from-blue-500 to-purple-500 text-white font-bold rounded-xl hover:shadow-lg transition transform hover:scale-105 mt-4"
+                    className={`w-full px-4 py-2 text-white font-semibold rounded-xl hover:shadow-lg transition transform hover:scale-105 flex items-center justify-center gap-2 text-sm ${
+                      item.reserved
+                        ? 'bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700'
+                        : 'bg-gradient-to-r from-green-500 to-green-600 hover:from-green-600 hover:to-green-700'
+                    }`}
                   >
-                    Зарезервировать 🎁
+                    {item.reserved ? (
+                      <>
+                        <span>❌</span>
+                        <span>Отменить</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>🎁</span>
+                        <span>Зарезервировать</span>
+                      </>
+                    )}
                   </button>
-                )}
+                </div>
               </div>
             </div>
           ))}
