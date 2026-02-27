@@ -26,15 +26,10 @@ const EVENT_TYPE_TO_KEY: Record<string, string> = {
   '23 февраля': 'mens-day',
   'выпускной': 'graduation',
   'рождение ребенка': 'baby-shower',
-  'birthday': 'birthday',
   'new year': 'new-year',
-  'christmas': 'christmas',
-  'wedding': 'wedding',
-  'anniversary': 'anniversary',
   "valentine's day": 'valentines',
   "women's day": 'womens-day',
   "men's day": 'mens-day',
-  'graduation': 'graduation',
   'baby shower': 'baby-shower'
 }
 
