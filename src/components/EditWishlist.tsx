@@ -2,6 +2,14 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import {
+  DEFAULT_LANGUAGE,
+  EVENT_TYPES,
+  getEventKeyFromLabel,
+  getEventLabelByValue,
+  getEventOptionLabel,
+  type Language
+} from '@/lib/i18n'
 
 /**
  * Альтернативная ссылка на товар в другом магазине
@@ -41,6 +49,8 @@ interface Wishlist {
   created_at: string
   updated_at: string
   require_name_for_reserve?: boolean // Требовать имя при резервировании
+  event_type?: string
+  language?: string
 }
 
 interface Props {
@@ -77,6 +87,9 @@ export default function EditWishlist({ wishlistId }: Props) {
   const [validatingShortId, setValidatingShortId] = useState(false)
   const [shortIdError, setShortIdError] = useState<string | null>(null)
   const [username, setUsername] = useState('')
+  const [eventType, setEventType] = useState('')
+  const [customEvent, setCustomEvent] = useState('')
+  const [language, setLanguage] = useState<Language>(DEFAULT_LANGUAGE)
   
   // Состояние для редактирования товаров
   const [tempItems, setTempItems] = useState<WishlistItem[]>([])
@@ -114,6 +127,13 @@ export default function EditWishlist({ wishlistId }: Props) {
   const [editingComment, setEditingComment] = useState<string | null>(null)
   const [commentValue, setCommentValue] = useState('')
 
+  const eventTypes = EVENT_TYPES
+
+  const getCurrentEventTypeValue = () => {
+    if (eventType === 'other') return customEvent.trim()
+    return eventType.trim()
+  }
+
   /**
    * Загружаем вишлист при монтировании
    */
@@ -145,6 +165,25 @@ export default function EditWishlist({ wishlistId }: Props) {
       setTempItems(data.items || [])
       setRequireNameForReserve(data.require_name_for_reserve || false)
       setCustomShortId(data.custom_short_id || '')
+      setLanguage(data.language === 'ru' ? 'ru' : 'en')
+      const loadedEventType = (data.event_type || '').trim()
+      if (loadedEventType) {
+        const isKnownKey = eventTypes.some(type => type.value === loadedEventType)
+        const mappedKey = getEventKeyFromLabel(loadedEventType)
+        if (isKnownKey) {
+          setEventType(loadedEventType)
+          setCustomEvent('')
+        } else if (mappedKey) {
+          setEventType(mappedKey)
+          setCustomEvent('')
+        } else {
+          setEventType('other')
+          setCustomEvent(loadedEventType)
+        }
+      } else {
+        setEventType('')
+        setCustomEvent('')
+      }
     } catch (error: any) {
       console.error('Error loading wishlist:', error)
       setError(error.message)
@@ -217,7 +256,12 @@ export default function EditWishlist({ wishlistId }: Props) {
    * Сохранение изменений параметров вишлиста
    */
   const saveSettings = async () => {
-    // Валидируем custom_short_id если он изменился
+    if (eventType === 'other' && !customEvent.trim()) {
+      setMessage({ type: 'error', text: 'Please enter an event name' })
+      return
+    }
+
+    // Validate custom_short_id if it changed
     if (customShortId !== (wishlist?.custom_short_id || '')) {
       const isValid = await validateShortId(customShortId)
       if (!isValid && customShortId.trim()) return
@@ -225,12 +269,21 @@ export default function EditWishlist({ wishlistId }: Props) {
 
     setSaving(true)
     try {
+      const currentEventType = getCurrentEventTypeValue()
       const updateData: any = {
         require_name_for_reserve: requireNameForReserve 
       }
 
       if (customShortId !== (wishlist?.custom_short_id || '')) {
         updateData.custom_short_id = customShortId || null
+      }
+
+      if (currentEventType !== (wishlist?.event_type || '')) {
+        updateData.event_type = currentEventType || null
+      }
+
+      if (language !== (wishlist?.language || DEFAULT_LANGUAGE)) {
+        updateData.language = language
       }
 
       const response = await fetch(`/api/wishlists/${wishlistId}`, {
@@ -253,11 +306,30 @@ export default function EditWishlist({ wishlistId }: Props) {
       // Обновляем основной объект вишлиста
       setWishlist(updatedWishlist)
       
-      // Обновляем локальные состояния чтобы отразить сохранённые значения
+      // Sync local state with saved values
       setCustomShortId(updatedWishlist.custom_short_id || '')
       setRequireNameForReserve(updatedWishlist.require_name_for_reserve || false)
+      setLanguage(updatedWishlist.language === 'ru' ? 'ru' : 'en')
+      const savedEventType = (updatedWishlist.event_type || '').trim()
+      if (savedEventType) {
+        const isKnownKey = eventTypes.some(type => type.value === savedEventType)
+        const mappedKey = getEventKeyFromLabel(savedEventType)
+        if (isKnownKey) {
+          setEventType(savedEventType)
+          setCustomEvent('')
+        } else if (mappedKey) {
+          setEventType(mappedKey)
+          setCustomEvent('')
+        } else {
+          setEventType('other')
+          setCustomEvent(savedEventType)
+        }
+      } else {
+        setEventType('')
+        setCustomEvent('')
+      }
       
-      setMessage({ type: 'success', text: 'Настройки обновлены!' })
+      setMessage({ type: 'success', text: 'Settings updated!' })
       setTimeout(() => setMessage(null), 3000)
     } catch (error: any) {
       console.error('Error saving settings:', error)
@@ -804,14 +876,14 @@ export default function EditWishlist({ wishlistId }: Props) {
               <div className="w-16 h-16 rounded-full bg-red-500 flex items-center justify-center text-4xl text-white shadow-lg">
                 ⚠️
               </div>
-              <h2 className="text-3xl font-black">Ошибка загрузки</h2>
+              <h2 className="text-3xl font-black">Load error</h2>
             </div>
-            <p className="mb-6 text-lg">{error || 'Вишлист не найден'}</p>
+            <p className="mb-6 text-lg">{error || 'Wishlist not found'}</p>
             <button
               onClick={() => router.push('/dashboard')}
               className="px-6 py-3 bg-gradient-to-r from-red-600 to-pink-600 hover:from-red-700 hover:to-pink-700 text-white rounded-2xl font-bold shadow-lg hover:shadow-xl transition transform hover:scale-105"
             >
-              ← Вернуться к списку
+              ← Back to list
             </button>
           </div>
         </div>
@@ -829,7 +901,7 @@ export default function EditWishlist({ wishlistId }: Props) {
             className="group flex items-center gap-2 text-indigo-700 hover:text-indigo-900 font-bold bg-white hover:bg-indigo-50 px-4 sm:px-6 py-3 rounded-2xl transition-all shadow-lg hover:shadow-xl border-2 border-indigo-100 hover:border-indigo-300 text-sm sm:text-base w-full sm:w-auto justify-center sm:justify-start transform hover:scale-105"
           >
             <span className="group-hover:-translate-x-1 transition-transform">←</span>
-            К списку
+            Back to list
           </button>
           
           <button
@@ -838,7 +910,7 @@ export default function EditWishlist({ wishlistId }: Props) {
             className="px-4 sm:px-6 py-3 bg-gradient-to-r from-red-500 to-pink-500 hover:from-red-600 hover:to-pink-600 text-white rounded-2xl transition-all disabled:opacity-50 font-bold shadow-lg hover:shadow-xl text-sm sm:text-base w-full sm:w-auto transform hover:scale-105 flex items-center justify-center gap-2"
           >
             <span>🗑️</span>
-            Удалить вишлист
+            Delete wishlist
           </button>
         </div>
 
@@ -865,7 +937,7 @@ export default function EditWishlist({ wishlistId }: Props) {
               <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-2xl shadow-lg">
                 📝
               </div>
-              <h2 className="text-xl sm:text-2xl font-black text-gray-800">Название вишлиста</h2>
+              <h2 className="text-xl sm:text-2xl font-black text-gray-800">Wishlist title</h2>
             </div>
             {editingTitle ? (
               <div className="flex flex-col sm:flex-row gap-3">
@@ -882,7 +954,7 @@ export default function EditWishlist({ wishlistId }: Props) {
                   className="px-5 sm:px-6 py-3 sm:py-4 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white rounded-2xl transition-all disabled:opacity-50 font-bold shadow-lg hover:shadow-xl text-sm sm:text-base transform hover:scale-105 flex items-center justify-center gap-2"
                 >
                   <span>✓</span>
-                  Сохранить
+                  Save
                 </button>
                 <button
                   onClick={() => {
@@ -892,7 +964,7 @@ export default function EditWishlist({ wishlistId }: Props) {
                   disabled={saving}
                   className="px-5 sm:px-6 py-3 sm:py-4 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-2xl transition-all disabled:opacity-50 font-bold shadow-lg text-sm sm:text-base transform hover:scale-105"
                 >
-                  ✕ Отмена
+                  ✕ Cancel
                 </button>
               </div>
             ) : (
@@ -903,7 +975,7 @@ export default function EditWishlist({ wishlistId }: Props) {
                   className="px-4 sm:px-5 py-2 sm:py-2.5 text-indigo-700 hover:bg-indigo-50 rounded-xl transition-all font-bold text-sm sm:text-base whitespace-nowrap border-2 border-indigo-200 hover:border-indigo-300 shadow-md flex items-center gap-2"
                 >
                   <span>✏️</span>
-                  Редактировать
+                  Edit
                 </button>
               </div>
             )}
@@ -912,14 +984,14 @@ export default function EditWishlist({ wishlistId }: Props) {
             <div className="flex items-center gap-3 px-4 py-3 bg-gradient-to-br from-indigo-50 to-purple-50 rounded-2xl border border-indigo-200">
               <span className="text-2xl">🔑</span>
               <div>
-                <p className="text-xs text-gray-600 font-medium">Короткий ID</p>
+                <p className="text-xs text-gray-600 font-medium">Short ID</p>
                 <p className="font-mono font-bold text-indigo-700">{wishlist.short_id}</p>
               </div>
             </div>
             <div className="flex items-center gap-3 px-4 py-3 bg-gradient-to-br from-pink-50 to-orange-50 rounded-2xl border border-pink-200">
               <span className="text-2xl">📦</span>
               <div>
-                <p className="text-xs text-gray-600 font-medium">Товаров</p>
+                <p className="text-xs text-gray-600 font-medium">Items</p>
                 <p className="font-bold text-2xl bg-gradient-to-r from-pink-600 to-orange-600 bg-clip-text text-transparent">{tempItems.length}</p>
               </div>
             </div>
@@ -930,8 +1002,8 @@ export default function EditWishlist({ wishlistId }: Props) {
             >
               <span className="text-2xl group-hover:rotate-12 transition-transform">🔗</span>
               <div>
-                <p className="text-xs text-gray-600 font-medium">Публичная</p>
-                <p className="font-bold text-green-700">Открыть →</p>
+                <p className="text-xs text-gray-600 font-medium">Public</p>
+                <p className="font-bold text-green-700">Open →</p>
               </div>
             </a>
           </div>
@@ -942,14 +1014,14 @@ export default function EditWishlist({ wishlistId }: Props) {
               <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-rose-500 to-pink-600 flex items-center justify-center text-2xl shadow-lg">
                 ⚙️
               </div>
-              <h2 className="text-xl sm:text-2xl font-black text-gray-800">Настройки публичного доступа</h2>
+              <h2 className="text-xl sm:text-2xl font-black text-gray-800">Public access settings</h2>
             </div>
             
             <div className="space-y-4">
               {/* Custom short ID */}
               <div>
                 <label htmlFor="custom_short_id" className="block text-sm font-semibold text-gray-800 mb-2">
-                  🔗 Адрес вишлиста (опционально)
+                  🔗 Wishlist address (optional)
                 </label>
                 <div className="space-y-2">
                   <input
@@ -957,7 +1029,7 @@ export default function EditWishlist({ wishlistId }: Props) {
                     id="custom_short_id"
                     value={customShortId}
                     onChange={(e) => setCustomShortId(e.target.value)}
-                    placeholder={wishlist?.short_id || 'мой-вишлист'}
+                    placeholder={wishlist?.short_id || 'my-wishlist'}
                     className={`w-full px-4 py-3 border-2 rounded-xl focus:ring-2 focus:ring-blue-500 transition bg-white text-gray-900 placeholder-gray-400 font-medium shadow-sm ${
                       shortIdError ? 'border-red-400' : 'border-blue-200'
                     }`}
@@ -968,12 +1040,70 @@ export default function EditWishlist({ wishlistId }: Props) {
                     <p className="text-sm text-red-600 font-medium">⚠️ {shortIdError}</p>
                   )}
                   <p className="text-sm text-gray-600">
-                    💡 Публичная ссылка:{' '}
+                    💡 Public link:{' '}
                     <code className="bg-gray-100 px-2 py-1 rounded text-blue-600 font-mono">
                       {getPublicUrl()}
                     </code>
                   </p>
                 </div>
+              </div>
+
+              {/* Тип события */}
+              <div>
+                <label htmlFor="event_type" className="block text-sm font-semibold text-gray-800 mb-2">
+                  🎉 Event type
+                </label>
+                <div className="space-y-2">
+                  <select
+                    id="event_type"
+                    value={eventType}
+                    onChange={(e) => {
+                      setEventType(e.target.value)
+                      if (e.target.value !== 'other') {
+                        setCustomEvent('')
+                      }
+                    }}
+                    className="w-full px-4 py-3 border-2 rounded-xl focus:ring-2 focus:ring-blue-500 transition bg-white text-gray-900 font-medium shadow-sm border-blue-200"
+                  >
+                    <option value="">Not selected</option>
+                    {eventTypes.map((type) => (
+                      <option key={type.value} value={type.value}>
+                        {getEventOptionLabel(type.value, 'en')}
+                      </option>
+                    ))}
+                  </select>
+                  {eventType === 'other' && (
+                    <input
+                      type="text"
+                      value={customEvent}
+                      onChange={(e) => setCustomEvent(e.target.value)}
+                      placeholder="For example: Anniversary, Housewarming"
+                      className="w-full px-4 py-3 border-2 rounded-xl focus:ring-2 focus:ring-blue-500 transition bg-white text-gray-900 font-medium shadow-sm border-blue-200"
+                      maxLength={50}
+                    />
+                  )}
+                  <p className="text-sm text-gray-600">
+                    💡 The public page theme updates automatically
+                  </p>
+                </div>
+              </div>
+
+              <div>
+                <label htmlFor="language" className="block text-sm font-semibold text-gray-800 mb-2">
+                  🌐 Public page language
+                </label>
+                <select
+                  id="language"
+                  value={language}
+                  onChange={(e) => setLanguage(e.target.value as Language)}
+                  className="w-full px-4 py-3 border-2 rounded-xl focus:ring-2 focus:ring-blue-500 transition bg-white text-gray-900 font-medium shadow-sm border-blue-200"
+                >
+                  <option value="en">English</option>
+                  <option value="ru">Russian</option>
+                </select>
+                <p className="text-sm text-gray-600 mt-2">
+                  💡 The public link opens in this language by default.
+                </p>
               </div>
 
               {/* Требовать имя при резервировании */}
@@ -985,23 +1115,44 @@ export default function EditWishlist({ wishlistId }: Props) {
                   className="w-6 h-6 rounded-lg border-2 border-rose-300 cursor-pointer mt-1 flex-shrink-0 accent-rose-500"
                 />
                 <div className="flex-grow">
-                  <p className="font-bold text-gray-900 text-base">Требовать имя при резервировании</p>
+                  <p className="font-bold text-gray-900 text-base">Require name for reservation</p>
                   <p className="text-sm text-gray-600 mt-1">
-                    Если включить, гости должны указать свое имя при резервировании подарка. 
-                    По умолчанию резервирование анонимное.
+                    If enabled, guests must enter their name when reserving a gift.
+                    By default, reservations are anonymous.
                   </p>
                 </div>
               </label>
               
+              {/* Language selector */}
+              <div>
+                <label htmlFor="language" className="block text-sm font-semibold text-gray-800 mb-2">
+                  🌐 Public page language
+                </label>
+                <select
+                  id="language"
+                  value={language}
+                  onChange={(e) => setLanguage(e.target.value as Language)}
+                  className="w-full px-4 py-3 border-2 rounded-xl focus:ring-2 focus:ring-blue-500 transition bg-white text-gray-900 font-medium shadow-sm border-blue-200"
+                >
+                  <option value="en">English</option>
+                  <option value="ru">Russian</option>
+                </select>
+                <p className="text-sm text-gray-600 mt-2">
+                  💡 The public link opens in this language by default.
+                </p>
+              </div>
+              
               {(requireNameForReserve !== (wishlist?.require_name_for_reserve || false) ||
-                customShortId !== (wishlist?.custom_short_id || '')) && (
+                customShortId !== (wishlist?.custom_short_id || '') ||
+                getCurrentEventTypeValue() !== (wishlist?.event_type || '') ||
+                language !== (wishlist?.language || DEFAULT_LANGUAGE)) && (
                 <button
                   onClick={saveSettings}
                   disabled={saving || validatingShortId || (shortIdError && customShortId.trim() ? true : false)}
                   className="w-full px-6 py-3 bg-gradient-to-r from-rose-500 to-pink-500 hover:from-rose-600 hover:to-pink-600 text-white rounded-2xl transition-all disabled:opacity-50 font-bold shadow-lg hover:shadow-xl text-base transform hover:scale-105 flex items-center justify-center gap-2"
                 >
                   <span>💾</span>
-                  Сохранить настройки
+                  Save settings
                 </button>
               )}
             </div>
@@ -1017,14 +1168,14 @@ export default function EditWishlist({ wishlistId }: Props) {
             className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white rounded-2xl font-bold text-lg shadow-lg hover:shadow-xl transition-all transform hover:scale-105"
           >
             <span className="text-2xl">➕</span>
-            Добавить товары в список
+            Add items to list
           </button>
         ) : (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-xl font-black text-gray-800 flex items-center gap-2">
                 <span>➕</span>
-                Добавить товары
+                Add items
               </h3>
               <button
                 onClick={() => {
@@ -1040,7 +1191,7 @@ export default function EditWishlist({ wishlistId }: Props) {
             <div>
               <label className="flex items-center gap-2 text-sm font-bold text-gray-700 mb-2">
                 <span>🔗</span>
-                Ссылки Amazon (вишлисты или товары)
+                Amazon links (wishlists or products)
               </label>
               <textarea
                 value={newItemsUrls}
@@ -1052,7 +1203,7 @@ export default function EditWishlist({ wishlistId }: Props) {
               />
               <p className="mt-2 text-xs text-gray-500 flex items-center gap-2">
                 <span>💡</span>
-                Каждая ссылка с новой строки. Дубликаты будут автоматически пропущены
+                One link per line. Duplicates will be automatically skipped
               </p>
             </div>
 
@@ -1070,7 +1221,7 @@ export default function EditWishlist({ wishlistId }: Props) {
                 ) : (
                   <>
                     <span>✓</span>
-                    <span>Добавить товары</span>
+                    <span>Add items</span>
                   </>
                 )}
               </button>
@@ -1082,7 +1233,7 @@ export default function EditWishlist({ wishlistId }: Props) {
                 disabled={addingItemsLoading}
                 className="px-6 py-3 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-xl font-bold shadow-lg transition-all disabled:opacity-50"
               >
-                Отмена
+                Cancel
               </button>
             </div>
           </div>
@@ -1097,14 +1248,14 @@ export default function EditWishlist({ wishlistId }: Props) {
             className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-700 hover:to-cyan-700 text-white rounded-2xl font-bold text-lg shadow-lg hover:shadow-xl transition-all transform hover:scale-105"
           >
             <span className="text-2xl">✏️</span>
-            Добавить товар вручную
+            Add item manually
           </button>
         ) : (
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-xl font-black text-gray-800 flex items-center gap-2">
                 <span>✏️</span>
-                Добавить товар вручную
+                Add item manually
               </h3>
               <button
                 onClick={() => {
@@ -1117,60 +1268,60 @@ export default function EditWishlist({ wishlistId }: Props) {
               </button>
             </div>
             
-            {/* Название товара */}
+            {/* Item name */}
             <div>
               <label className="flex items-center gap-2 text-sm font-bold text-gray-700 mb-2">
                 <span>📝</span>
-                Название товара <span className="text-red-500">*</span>
+                Item name <span className="text-red-500">*</span>
               </label>
               <input
                 type="text"
                 value={manualItem.title}
                 onChange={(e) => setManualItem(prev => ({ ...prev, title: e.target.value }))}
-                placeholder="Введите название товара"
+                placeholder="Enter item name"
                 className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-gray-900 font-medium bg-white shadow-sm"
               />
             </div>
 
-            {/* Цена */}
+            {/* Price */}
             <div>
               <label className="flex items-center gap-2 text-sm font-bold text-gray-700 mb-2">
                 <span>💰</span>
-                Цена (опционально)
+                Price (optional)
               </label>
               <input
                 type="text"
                 value={manualItem.price}
                 onChange={(e) => setManualItem(prev => ({ ...prev, price: e.target.value }))}
-                placeholder="например: 99.99 AED"
+                placeholder="For example: 99.99 AED"
                 className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-gray-900 font-medium bg-white shadow-sm"
               />
             </div>
 
-            {/* Ссылка на товар */}
+            {/* Item link */}
             <div>
               <label className="flex items-center gap-2 text-sm font-bold text-gray-700 mb-2">
                 <span>🔗</span>
-                Ссылка на товар <span className="text-red-500">*</span>
+                Item link <span className="text-red-500">*</span>
               </label>
               <input
                 type="url"
                 value={manualItem.url}
                 onChange={(e) => setManualItem(prev => ({ ...prev, url: e.target.value }))}
-                placeholder="https://noon.com/... или https://amazon.com/dp/..."
+                placeholder="https://noon.com/... or https://amazon.com/dp/..."
                 className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-gray-900 font-medium bg-white shadow-sm"
               />
               <p className="mt-2 text-xs text-gray-500 flex items-center gap-2">
                 <span>💡</span>
-                Ссылка на Noon, Amazon или любой другой магазин
+                Link from Noon, Amazon or any other store
               </p>
             </div>
 
-            {/* Загрузка изображения */}
+            {/* Image */}
             <div>
               <label className="flex items-center gap-2 text-sm font-bold text-gray-700 mb-2">
                 <span>📸</span>
-                Изображение товара (опционально)
+                Item image (optional)
               </label>
               
               {manualItem.img && (
@@ -1209,12 +1360,12 @@ export default function EditWishlist({ wishlistId }: Props) {
                 
                 <p className="text-xs text-gray-500 flex items-center gap-2">
                   <span>💡</span>
-                  Загрузите файл с компьютера или вставьте ссылку и нажмите кнопку
+                  Upload file from computer or paste link and click button
                 </p>
               </div>
 
               <div className="mt-2">
-                <label className="text-xs font-bold text-gray-600 mb-1 block">или по ссылке:</label>
+                <label className="text-xs font-bold text-gray-600 mb-1 block">or by link:</label>
                 <div className="flex gap-2">
                   <input
                     type="url"
@@ -1234,26 +1385,26 @@ export default function EditWishlist({ wishlistId }: Props) {
               </div>
             </div>
 
-            {/* Комментарий */}
+            {/* Comment */}
             <div>
               <label className="flex items-center gap-2 text-sm font-bold text-gray-700 mb-2">
                 <span>💬</span>
-                Комментарий к товару (опционально)
+                Comment to item (optional)
               </label>
               <textarea
                 value={manualItem.comment}
                 onChange={(e) => setManualItem(prev => ({ ...prev, comment: e.target.value }))}
-                placeholder="Пожелание по цвету, размеру, или другие комментарии..."
+                placeholder="Wish for color, size, or other comments..."
                 className="w-full px-4 py-3 border-2 border-gray-300 rounded-xl focus:ring-4 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-gray-900 font-medium bg-white shadow-sm resize-none"
                 rows={3}
               />
               <p className="mt-2 text-xs text-gray-500 flex items-center gap-2">
                 <span>💡</span>
-                Комментарий будет виден в публичном списке
+                Comment will be visible in the public list
               </p>
             </div>
 
-            {/* Кнопки действия */}
+            {/* Action buttons */}
             <div className="flex gap-3">
               <button
                 onClick={addManualItem}
@@ -1263,12 +1414,12 @@ export default function EditWishlist({ wishlistId }: Props) {
                 {saving ? (
                   <>
                     <div className="w-5 h-5 border-4 border-white border-t-transparent rounded-full animate-spin"></div>
-                    <span>Добавление...</span>
+                    <span>Adding...</span>
                   </>
                 ) : (
                   <>
                     <span>✓</span>
-                    <span>Добавить товар</span>
+                    <span>Add item</span>
                   </>
                 )}
               </button>
@@ -1280,20 +1431,20 @@ export default function EditWishlist({ wishlistId }: Props) {
                 disabled={saving}
                 className="px-6 py-3 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-xl font-bold shadow-lg transition-all disabled:opacity-50"
               >
-                Отмена
+                Cancel
               </button>
             </div>
           </div>
         )}
       </div>
 
-      {/* Список товаров */}
+      {/* Items list */}
       <div className="bg-white/90 backdrop-blur-sm rounded-3xl shadow-2xl p-6 sm:p-8 border-2 border-gray-200">
         <div className="flex items-center gap-3 mb-6">
           <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-pink-500 to-orange-500 flex items-center justify-center text-2xl shadow-lg">
             🎁
           </div>
-          <h2 className="text-2xl sm:text-3xl font-black text-gray-800">Товары ({tempItems.length})</h2>
+          <h2 className="text-2xl sm:text-3xl font-black text-gray-800">Items ({tempItems.length})</h2>
         </div>
         
         {tempItems.length === 0 ? (
@@ -1302,8 +1453,8 @@ export default function EditWishlist({ wishlistId }: Props) {
             <div className="absolute bottom-0 left-0 w-32 h-32 bg-pink-300 rounded-full mix-blend-multiply filter blur-2xl opacity-30 animate-blob animation-delay-2000"></div>
             <div className="relative z-10">
               <div className="text-7xl mb-4 animate-bounce">📦</div>
-              <p className="text-xl sm:text-2xl font-bold text-gray-700">Список товаров пуст</p>
-              <p className="text-gray-600 mt-2">Добавьте товары через форму</p>
+              <p className="text-xl sm:text-2xl font-bold text-gray-700">Items list is empty</p>
+              <p className="text-gray-600 mt-2">Add items through the form above</p>
             </div>
           </div>
         ) : (
@@ -1336,12 +1487,12 @@ export default function EditWishlist({ wishlistId }: Props) {
                   {/* Информация */}
                   <div className="flex-1 min-w-0">
                     <div className="space-y-4">
-                      {/* Галерея альтернативных изображений */}
-                      {alternativeImages[item.asin] && alternativeImages[item.asin].length > 0 && (
+                  {/* Image gallery */}
+                  {alternativeImages[item.asin] && alternativeImages[item.asin].length > 0 && (
                         <div className="p-4 bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl border-2 border-purple-200 shadow-inner">
                           <p className="text-sm font-bold text-purple-700 mb-3 flex items-center gap-2">
                             <span>📸</span>
-                            Выберите изображение ({alternativeImages[item.asin].length} доступно):
+                            Select image ({alternativeImages[item.asin].length} available):
                           </p>
                           <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-2">
                             {alternativeImages[item.asin].map((imgUrl, idx) => (
@@ -1373,7 +1524,7 @@ export default function EditWishlist({ wishlistId }: Props) {
                       <div>
                         <label className="flex items-center gap-2 text-sm font-bold text-gray-700 mb-2">
                           <span>📝</span>
-                          Название
+                          Name
                         </label>
                         <input
                           type="text"
@@ -1385,7 +1536,7 @@ export default function EditWishlist({ wishlistId }: Props) {
                       <div>
                         <label className="flex items-center gap-2 text-sm font-bold text-gray-700 mb-2">
                           <span>💰</span>
-                          Цена
+                          Price
                         </label>
                         <input
                           type="text"
@@ -1400,7 +1551,7 @@ export default function EditWishlist({ wishlistId }: Props) {
                           ASIN: {item.asin}
                         </div>
                         
-                        {/* Основная ссылка с кнопкой редактирования */}
+                        {/* Main link with edit button */}
                         {editingUrl === item.asin ? (
                           <div className="flex gap-2 items-center flex-wrap w-full">
                             <input
@@ -1431,7 +1582,7 @@ export default function EditWishlist({ wishlistId }: Props) {
                               className="px-3 py-1.5 bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-lg font-semibold transition-colors flex items-center gap-1"
                             >
                               <span>🔗</span>
-                              Ссылка
+                              Link
                             </a>
                             <button
                               onClick={() => {
@@ -1439,14 +1590,14 @@ export default function EditWishlist({ wishlistId }: Props) {
                                 setEditUrlValue(item.url)
                               }}
                               className="px-3 py-1.5 bg-yellow-100 hover:bg-yellow-200 text-yellow-700 rounded-lg font-semibold transition-colors flex items-center gap-1 text-xs"
-                              title="Редактировать ссылку"
+                              title="Edit link"
                             >
                               <span>✏️</span>
                             </button>
                           </div>
                         )}
                         
-                        {/* Альтернативные ссылки */}
+                        {/* Alternative links */}
                         {item.alternativeLinks && item.alternativeLinks.map((link) => (
                           <div key={link.store} className="flex items-center gap-1">
                             <a
@@ -1468,7 +1619,7 @@ export default function EditWishlist({ wishlistId }: Props) {
                           </div>
                         ))}
                         
-                        {/* Кнопка поиска на Noon */}
+                        {/* Search on Noon button */}
                         {(!item.alternativeLinks || !item.alternativeLinks.some(l => l.store === 'noon')) && (
                           <button
                             onClick={() => searchNoonLink(item.asin, item.title, item.price)}
@@ -1478,24 +1629,24 @@ export default function EditWishlist({ wishlistId }: Props) {
                             {searchingNoon === item.asin ? (
                               <>
                                 <div className="w-3 h-3 border-2 border-orange-600 border-t-transparent rounded-full animate-spin"></div>
-                                <span>Поиск...</span>
+                                <span>Searching...</span>
                               </>
                             ) : (
                               <>
                                 <span>🔍</span>
-                                <span>Найти на Noon</span>
+                                <span>Find on Noon</span>
                               </>
                             )}
                           </button>
                         )}
                       </div>
 
-                      {/* Комментарий к товару */}
+                      {/* Comment to item */}
                       <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl p-4 border-2 border-amber-200">
                         <div className="flex items-center justify-between mb-2">
                           <label className="flex items-center gap-2 text-sm font-bold text-amber-900">
                             <span>💬</span>
-                            Комментарий
+                            Comment
                           </label>
                           {!editingComment || editingComment !== item.asin ? (
                             <button
@@ -1505,7 +1656,7 @@ export default function EditWishlist({ wishlistId }: Props) {
                               }}
                               className="text-xs px-2 py-1 bg-amber-200 hover:bg-amber-300 text-amber-900 rounded transition-colors"
                             >
-                              ✏️ {item.comment ? 'Изменить' : 'Добавить'}
+                              ✏️ {item.comment ? 'Edit' : 'Add'}
                             </button>
                           ) : null}
                         </div>
@@ -1515,7 +1666,7 @@ export default function EditWishlist({ wishlistId }: Props) {
                             <textarea
                               value={commentValue}
                               onChange={(e) => setCommentValue(e.target.value)}
-                              placeholder="Пожелание по цвету, размеру, или другие комментарии..."
+                              placeholder="Wish for color, size, or other comments..."
                               className="w-full px-3 py-2 border-2 border-amber-300 rounded-lg text-gray-900 font-medium text-sm bg-white focus:outline-none focus:ring-2 focus:ring-amber-500/50 resize-none"
                               rows={2}
                             />
@@ -1524,7 +1675,7 @@ export default function EditWishlist({ wishlistId }: Props) {
                                 onClick={() => saveComment(item.asin)}
                                 className="flex-1 px-3 py-2 bg-green-500 hover:bg-green-600 text-white rounded-lg font-semibold text-xs transition-colors"
                               >
-                                ✓ Сохранить
+                                ✓ Save
                               </button>
                               <button
                                 onClick={() => {
@@ -1539,12 +1690,12 @@ export default function EditWishlist({ wishlistId }: Props) {
                           </div>
                         ) : (
                           <p className="text-sm text-amber-900 font-medium">
-                            {item.comment || <span className="text-amber-600 italic">Нет комментариев</span>}
+                            {item.comment || <span className="text-amber-600 italic">No comments</span>}
                           </p>
                         )}
                       </div>
 
-                      {/* Кнопки действия для товара */}
+                      {/* Action buttons for item */}
                       {changedItems.has(item.asin) && (
                         <div className="flex gap-2 flex-wrap">
                           <button
@@ -1553,7 +1704,7 @@ export default function EditWishlist({ wishlistId }: Props) {
                             className="flex-1 px-4 py-2 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white rounded-lg text-xs sm:text-sm font-bold transition-all disabled:opacity-50 shadow-lg hover:shadow-xl transform hover:scale-105 flex items-center justify-center gap-2"
                           >
                             <span>✓</span>
-                            Сохранить
+                            Save
                           </button>
                           <button
                             onClick={() => {
@@ -1575,13 +1726,13 @@ export default function EditWishlist({ wishlistId }: Props) {
                     </div>
                   </div>
 
-                  {/* Действия */}
+                  {/* Actions */}
                   <div className="flex sm:flex-col gap-2">
                     <button
                       onClick={() => loadAlternativeImages(item.asin, item.url)}
                       disabled={loadingImages === item.asin}
                       className="flex-1 sm:flex-none px-4 py-2 bg-gradient-to-r from-purple-100 to-pink-100 hover:from-purple-200 hover:to-pink-200 text-purple-700 rounded-xl text-sm font-bold transition-all disabled:opacity-50 shadow-md hover:shadow-lg transform hover:scale-105 flex items-center justify-center gap-2"
-                      title="Загрузить альтернативные изображения"
+                      title="Load alternative images"
                     >
                       {loadingImages === item.asin ? (
                         <>
@@ -1591,7 +1742,7 @@ export default function EditWishlist({ wishlistId }: Props) {
                       ) : (
                         <>
                           <span>🖼️</span>
-                          <span className="hidden sm:inline text-xs">Фото</span>
+                          <span className="hidden sm:inline text-xs">Photos</span>
                         </>
                       )}
                     </button>
@@ -1601,7 +1752,7 @@ export default function EditWishlist({ wishlistId }: Props) {
                       className="flex-1 sm:flex-none px-4 py-2 text-red-700 hover:bg-red-50 rounded-xl text-sm font-bold transition-all disabled:opacity-50 border-2 border-red-200 hover:border-red-300 shadow-md hover:shadow-lg transform hover:scale-105 flex items-center justify-center gap-2"
                     >
                       <span>🗑️</span>
-                      <span className="hidden sm:inline text-xs">Удалить</span>
+                      <span className="hidden sm:inline text-xs">Delete</span>
                     </button>
                   </div>
                 </div>
@@ -1618,12 +1769,12 @@ export default function EditWishlist({ wishlistId }: Props) {
                 {saving ? (
                   <>
                     <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                    Сохраняю...
+                    Saving...
                   </>
                 ) : (
                   <>
                     <span>💾</span>
-                    Сохранить все изменения
+                    Save all changes
                   </>
                 )}
               </button>

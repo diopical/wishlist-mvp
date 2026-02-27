@@ -60,8 +60,8 @@ export default function DashboardContent({ wishlists, userEmail }: Props) {
   const handleShare = async (wishlist: Wishlist) => {
     const url = window.location.origin + getPublicUrl(wishlist)
     const shareData = {
-      title: wishlist.destination || 'Мой вишлист',
-      text: `Посмотрите мой вишлист "${wishlist.destination}"!`,
+      title: wishlist.destination || 'My wishlist',
+      text: `Check out my wishlist "${wishlist.destination}"!`,
       url: url
     }
 
@@ -72,7 +72,7 @@ export default function DashboardContent({ wishlists, userEmail }: Props) {
       } else {
         // Fallback - копируем в буфер обмена
         await navigator.clipboard.writeText(url)
-        alert('Ссылка скопирована в буфер обмена!')
+        alert('Link copied to clipboard!')
       }
     } catch (error) {
       // Пользователь отменил или произошла ошибка
@@ -80,7 +80,7 @@ export default function DashboardContent({ wishlists, userEmail }: Props) {
         // Пробуем просто скопировать в буфер обмена
         try {
           await navigator.clipboard.writeText(url)
-          alert('Ссылка скопирована в буфер обмена!')
+          alert('Link copied to clipboard!')
         } catch (clipboardError) {
           console.error('Share error:', error)
         }
@@ -89,7 +89,7 @@ export default function DashboardContent({ wishlists, userEmail }: Props) {
   }
 
   const handleDeleteWishlist = async (id: string, name: string) => {
-    if (!confirm(`Вы уверены? Вишлист "${name}" будет удален безвозвратно!`)) {
+    if (!confirm(`Are you sure? The wishlist "${name}" will be permanently deleted!`)) {
       return
     }
 
@@ -99,13 +99,13 @@ export default function DashboardContent({ wishlists, userEmail }: Props) {
       })
 
       if (!response.ok) {
-        throw new Error('Не удалось удалить вишлист')
+        throw new Error('Failed to delete wishlist')
       }
 
       // Перезагружаем страницу для обновления списка
       router.refresh()
     } catch (error: any) {
-      alert('Ошибка: ' + (error.message || 'Не удалось удалить вишлист'))
+      alert('Error: ' + (error.message || 'Failed to delete wishlist'))
     }
   }
 
@@ -123,21 +123,21 @@ export default function DashboardContent({ wishlists, userEmail }: Props) {
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-12 gap-6">
           <div className="space-y-2">
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-black bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 bg-clip-text text-transparent mb-3 leading-tight">
-              Мои вишлисты ✨
+              My wishlists ✨
             </h1>
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-lg shadow-lg">
                 {userEmail.charAt(0).toUpperCase()}
               </div>
               <div>
-                <p className="text-gray-600 text-sm font-medium">Добро пожаловать</p>
+                <p className="text-gray-600 text-sm font-medium">Welcome</p>
                 <p className="text-gray-900 font-semibold">{userEmail}</p>
               </div>
             </div>
             <div className="inline-flex items-center gap-2 px-4 py-2 bg-white/80 backdrop-blur-sm rounded-full shadow-md border border-purple-100">
               <span className="text-2xl">📚</span>
               <span className="font-bold text-purple-600">{wishlists.length}</span>
-              <span className="text-gray-600 text-sm">вишлистов</span>
+              <span className="text-gray-600 text-sm">wishlists</span>
             </div>
           </div>
           <div className="flex items-center gap-3">
@@ -146,7 +146,7 @@ export default function DashboardContent({ wishlists, userEmail }: Props) {
               className="group px-6 py-3 bg-white hover:bg-gradient-to-r hover:from-indigo-50 hover:to-purple-50 text-gray-700 hover:text-indigo-700 rounded-2xl transition-all font-semibold shadow-lg hover:shadow-xl border border-gray-100 hover:border-indigo-200 flex items-center gap-2 transform hover:scale-105"
             >
               <span className="group-hover:rotate-12 transition-transform">👤</span>
-              Профиль
+              Profile
             </a>
             <LogoutButton />
           </div>
@@ -157,7 +157,7 @@ export default function DashboardContent({ wishlists, userEmail }: Props) {
           <div>
             <h2 className="text-3xl font-bold mb-8 text-gray-800 flex items-center gap-3">
               <span className="text-4xl">🎁</span>
-              Ваши коллекции
+              Your collections
             </h2>
             <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
               {wishlists.map((wishlist) => (
@@ -192,7 +192,7 @@ export default function DashboardContent({ wishlists, userEmail }: Props) {
                   {/* Информация */}
                   <div className="p-6">
                     <h3 className="text-2xl font-black mb-4 line-clamp-2 text-gray-900 group-hover:text-transparent group-hover:bg-gradient-to-r group-hover:from-indigo-600 group-hover:to-purple-600 group-hover:bg-clip-text transition-all">
-                      {wishlist.destination || 'Без названия'}
+                      {wishlist.destination || 'Untitled'}
                     </h3>
                     
                     {/* Event info */}
@@ -248,7 +248,7 @@ export default function DashboardContent({ wishlists, userEmail }: Props) {
                         title="Редактировать вишлист"
                       >
                         <span>✏️</span>
-                        <span className="hidden md:inline">Править</span>
+                        <span className="inline">Править</span>
                       </button>
                       <a
                         href={getPublicUrl(wishlist)}
@@ -258,7 +258,7 @@ export default function DashboardContent({ wishlists, userEmail }: Props) {
                         title="Открыть публичную ссылку"
                       >
                         <span>🚀</span>
-                        <span className="hidden md:inline">Открыть</span>
+                        <span className="inline">Открыть</span>
                       </a>
                       <button
                         onClick={() => handleShare(wishlist)}

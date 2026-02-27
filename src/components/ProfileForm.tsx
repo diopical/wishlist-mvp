@@ -52,7 +52,7 @@ export default function ProfileForm() {
         const response = await fetch('/api/profile')
         
         if (!response.ok) {
-          throw new Error('Не удалось загрузить профиль')
+          throw new Error('Failed to load profile')
         }
 
         const data = await response.json()
@@ -61,7 +61,7 @@ export default function ProfileForm() {
         console.error('Error loading profile:', error)
         setMessage({
           type: 'error',
-          text: 'Ошибка загрузки профиля. Попробуйте обновить страницу.',
+          text: 'Failed to load profile. Please refresh the page.',
         })
       } finally {
         setLoading(false)
@@ -109,13 +109,13 @@ export default function ProfileForm() {
       const data = await response.json()
 
       if (!response.ok) {
-        throw new Error(data.error || 'Ошибка при сохранении')
+        throw new Error(data.error || 'Failed to save changes')
       }
 
       // Показываем сообщение об успехе
       setMessage({
         type: 'success',
-        text: 'Профиль успешно обновлен!',
+        text: 'Profile updated successfully!',
       })
 
       // Обновляем данные формы из ответа сервера
@@ -132,7 +132,7 @@ export default function ProfileForm() {
       console.error('Error saving profile:', error)
       setMessage({
         type: 'error',
-        text: error.message || 'Не удалось сохранить изменения',
+        text: error.message || 'Failed to save changes',
       })
     } finally {
       setSaving(false)
@@ -162,7 +162,7 @@ export default function ProfileForm() {
             👤
           </div>
           <h1 className="text-4xl font-black bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-            Мой профиль
+            My profile
           </h1>
         </div>
 
@@ -194,14 +194,14 @@ export default function ProfileForm() {
               className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl bg-gray-50 text-gray-600 cursor-not-allowed font-medium"
             />
             <p className="mt-2 text-sm text-gray-600">
-              💡 Email управляется через настройки аутентификации
+              💡 Email is managed in your authentication settings
             </p>
           </div>
 
           {/* Username для публичной ссылки */}
           <div>
             <label htmlFor="username" className="block text-sm font-semibold text-gray-800 mb-2">
-              🔗 Username для публичных вишлистов
+              🔗 Username for public wishlists
             </label>
             <input
               type="text"
@@ -209,19 +209,19 @@ export default function ProfileForm() {
               name="username"
               value={formData.username}
               onChange={handleChange}
-              placeholder="ваше_имя"
+              placeholder="your_name"
               className="w-full px-4 py-3 border-2 border-blue-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition bg-white text-gray-900 placeholder-gray-400 font-medium shadow-sm hover:border-blue-300"
               pattern="^[a-zA-Z0-9_-]{3,20}$"
-              title="Только буквы, цифры, подчеркивание и дефис (3-20 символов)"
+              title="Letters, numbers, underscore, and hyphen only (3-20 characters)"
               maxLength={20}
             />
             <p className="mt-2 text-sm text-gray-600">
-              💡 Используется в публичных ссылках: example.com/w/{formData.username}/wishlist
+              💡 Used in public links: example.com/w/{formData.username}/wishlist
             </p>
           </div>
           <div>
             <label htmlFor="first_name" className="block text-sm font-semibold text-gray-800 mb-2">
-              👤 Имя
+              👤 First name
             </label>
             <input
               type="text"
@@ -229,7 +229,7 @@ export default function ProfileForm() {
               name="first_name"
               value={formData.first_name}
               onChange={handleChange}
-              placeholder="Введите ваше имя"
+              placeholder="Enter your first name"
               className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition bg-white text-gray-900 placeholder-gray-400 font-medium shadow-sm hover:border-gray-300"
               maxLength={50}
             />
@@ -238,7 +238,7 @@ export default function ProfileForm() {
           {/* Фамилия */}
           <div>
             <label htmlFor="last_name" className="block text-sm font-semibold text-gray-800 mb-2">
-              👥 Фамилия
+              👥 Last name
             </label>
             <input
               type="text"
@@ -246,7 +246,7 @@ export default function ProfileForm() {
               name="last_name"
               value={formData.last_name}
               onChange={handleChange}
-              placeholder="Введите вашу фамилию"
+              placeholder="Enter your last name"
               className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition bg-white text-gray-900 placeholder-gray-400 font-medium shadow-sm hover:border-gray-300"
               maxLength={50}
             />
@@ -255,7 +255,7 @@ export default function ProfileForm() {
           {/* Телефон */}
           <div>
             <label htmlFor="phone" className="block text-sm font-semibold text-gray-800 mb-2">
-              📱 Телефон
+              📱 Phone
             </label>
             <input
               type="tel"
@@ -263,16 +263,16 @@ export default function ProfileForm() {
               name="phone"
               value={formData.phone}
               onChange={handleChange}
-              placeholder="+7 (999) 123-45-67"
+              placeholder="+1 (555) 123-4567"
               className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition bg-white text-gray-900 placeholder-gray-400 font-medium shadow-sm hover:border-gray-300"
               maxLength={20}
             />
           </div>
 
-          {/* Дата рождения */}
+          {/* Birth date */}
           <div>
             <label htmlFor="birth_date" className="block text-sm font-semibold text-gray-800 mb-2">
-              🎂 Дата рождения
+              🎂 Birth date
             </label>
             <input
               type="date"
@@ -292,7 +292,7 @@ export default function ProfileForm() {
               disabled={saving}
               className="flex-1 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-bold py-3.5 px-6 rounded-xl transition-all disabled:from-gray-400 disabled:to-gray-400 disabled:cursor-not-allowed shadow-lg hover:shadow-xl transform hover:-translate-y-0.5"
             >
-              {saving ? '💾 Сохранение...' : '💾 Сохранить изменения'}
+              {saving ? '💾 Saving...' : '💾 Save changes'}
             </button>
             
             <button
@@ -301,7 +301,7 @@ export default function ProfileForm() {
               disabled={saving}
               className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-3.5 px-6 rounded-xl transition disabled:bg-gray-100 disabled:cursor-not-allowed shadow-md hover:shadow-lg"
             >
-              ← Отмена
+              ← Cancel
             </button>
           </div>
         </form>

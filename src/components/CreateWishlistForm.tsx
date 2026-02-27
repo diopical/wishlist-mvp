@@ -2,6 +2,13 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import {
+  DEFAULT_LANGUAGE,
+  EVENT_TYPES,
+  LANGUAGE_OPTIONS,
+  getEventOptionLabel,
+  type Language
+} from '@/lib/i18n'
 
 /**
  * Компонент формы создания нового вишлиста
@@ -22,24 +29,13 @@ export default function CreateWishlistForm() {
   const [eventType, setEventType] = useState('')
   const [customEvent, setCustomEvent] = useState('')
   const [eventDate, setEventDate] = useState('')
+  const [language, setLanguage] = useState<Language>(DEFAULT_LANGUAGE)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
   
   // Популярные типы событий
-  const eventTypes = [
-    { value: 'birthday', label: '🎂 День рождения' },
-    { value: 'new-year', label: '🎄 Новый год' },
-    { value: 'christmas', label: '🎅 Рождество' },
-    { value: 'wedding', label: '💍 Свадьба' },
-    { value: 'anniversary', label: '💑 Годовщина' },
-    { value: 'valentines', label: '💝 День Святого Валентина' },
-    { value: 'womens-day', label: '🌸 8 Марта' },
-    { value: 'mens-day', label: '🎖️ 23 Февраля' },
-    { value: 'graduation', label: '🎓 Выпускной' },
-    { value: 'baby-shower', label: '🍼 Рождение ребенка' },
-    { value: 'other', label: '✨ Другое' },
-  ]
+  const eventTypes = EVENT_TYPES
   
   /**
    * Валидация Amazon URL
@@ -96,7 +92,7 @@ export default function CreateWishlistForm() {
 
     // Валидация
     if (!title.trim()) {
-      setError('Укажите название вишлиста')
+      setError('Please enter a wishlist title')
       return
     }
 
@@ -106,12 +102,17 @@ export default function CreateWishlistForm() {
       .filter(u => u.length > 0)
 
     if (urls.length === 0) {
-      setError('Добавьте хотя бы одну ссылку на товар или вишлист Amazon')
+      setError('Add at least one Amazon product or wishlist link')
       return
     }
 
     if (!validateUrls(urls)) {
-      setError('Все ссылки должны быть корректными Amazon URL (товары или вишлисты)')
+      setError('All links must be valid Amazon URLs (products or wishlists)')
+      return
+    }
+
+    if (eventType === 'other' && !customEvent.trim()) {
+      setError('Please enter a custom event name')
       return
     }
 
@@ -125,19 +126,20 @@ export default function CreateWishlistForm() {
         },
         body: JSON.stringify({
           title: title.trim(),
-          urls: urls, // Отправляем массив URLs
-          event_type: eventType === 'other' ? customEvent.trim() : eventTypes.find(e => e.value === eventType)?.label.replace(/^[^\s]+\s/, '') || '',
+          urls: urls,
+          event_type: eventType === 'other' ? customEvent.trim() : (eventType || null),
           event_date: eventDate || null,
+          language,
         }),
       })
 
       const data = await response.json()
 
       if (!response.ok) {
-        throw new Error(data.error || 'Ошибка создания вишлиста')
+        throw new Error(data.error || 'Failed to create wishlist')
       }
 
-      console.log('✅ Вишлист создан:', data)
+      console.log('✅ Wishlist created:', data)
       setSuccess(true)
 
       // Перезагружаем страницу для обновления списка вишлистов
@@ -147,8 +149,8 @@ export default function CreateWishlistForm() {
       }, 1000)
 
     } catch (error: any) {
-      console.error('Ошибка создания вишлиста:', error)
-      setError(error.message || 'Не удалось создать вишлист')
+      console.error('Error creating wishlist:', error)
+      setError(error.message || 'Failed to create wishlist')
     } finally {
       setLoading(false)
     }
@@ -166,7 +168,7 @@ export default function CreateWishlistForm() {
           </div>
           <div>
             <h2 className="text-2xl font-black bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">
-              Создать новый вишлист
+              Create a new wishlist
             </h2>
           </div>
         </div>
@@ -177,7 +179,7 @@ export default function CreateWishlistForm() {
           <div className="group">
             <label htmlFor="title" className="flex items-center gap-2 text-sm font-bold text-gray-700 mb-2">
               <span>🎯</span>
-              Название вишлиста
+              Wishlist title
               <span className="text-red-500">*</span>
             </label>
             <input
@@ -185,7 +187,7 @@ export default function CreateWishlistForm() {
               id="title"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="Мой подарочный список"
+              placeholder="My gift list"
               className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-purple-500/20 focus:border-purple-500 transition-all text-gray-900 font-medium bg-white shadow-sm"
               disabled={loading}
               maxLength={100}
@@ -196,7 +198,7 @@ export default function CreateWishlistForm() {
           <div className="group">
             <label htmlFor="event-type" className="flex items-center gap-2 text-sm font-bold text-gray-700 mb-2">
               <span>🎉</span>
-              Тип события
+              Event type
             </label>
             <select
               id="event-type"
@@ -210,10 +212,10 @@ export default function CreateWishlistForm() {
               className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-purple-500/20 focus:border-purple-500 transition-all text-gray-900 font-medium bg-white shadow-sm appearance-none cursor-pointer"
               disabled={loading}
             >
-              <option value="">Выберите тип события (необязательно)</option>
+              <option value="">Choose an event type (optional)</option>
               {eventTypes.map((type) => (
                 <option key={type.value} value={type.value}>
-                  {type.label}
+                  {getEventOptionLabel(type.value, 'en')}
                 </option>
               ))}
             </select>
@@ -225,14 +227,14 @@ export default function CreateWishlistForm() {
           <div className="group animate-fadeIn">
             <label htmlFor="custom-event" className="flex items-center gap-2 text-sm font-bold text-gray-700 mb-2">
               <span>✏️</span>
-              Ваш вариант события
+              Custom event name
             </label>
             <input
               type="text"
               id="custom-event"
               value={customEvent}
               onChange={(e) => setCustomEvent(e.target.value)}
-              placeholder="Например: Новоселье, Юбилей компании..."
+              placeholder="For example: Housewarming, Company anniversary..."
               className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-purple-500/20 focus:border-purple-500 transition-all text-gray-900 font-medium bg-white shadow-sm"
               disabled={loading}
               maxLength={50}
@@ -245,7 +247,7 @@ export default function CreateWishlistForm() {
           <div className="group">
             <label htmlFor="event-date" className="flex items-center gap-2 text-sm font-bold text-gray-700 mb-2">
               <span>📅</span>
-              Дата события
+              Event date
             </label>
             <input
               type="date"
@@ -262,7 +264,7 @@ export default function CreateWishlistForm() {
         <div className="group">
           <label htmlFor="url" className="flex items-center gap-2 text-sm font-bold text-gray-700 mb-2">
             <span>🔗</span>
-            Ссылки Amazon (вишлисты или товары)
+            Amazon links (wishlists or products)
             <span className="text-red-500">*</span>
           </label>
           <textarea
@@ -276,9 +278,33 @@ export default function CreateWishlistForm() {
           />
           <p className="mt-2 text-xs text-gray-500 flex items-center gap-2">
             <span>💡</span>
-            Каждая ссылка с новой строки. Можно миксовать ссылки на товары и вишлисты
+            One link per line. You can mix product and wishlist URLs.
           </p>
         </div>
+
+      <div className="group">
+        <label htmlFor="language" className="flex items-center gap-2 text-sm font-bold text-gray-700 mb-2">
+          <span>🌐</span>
+          Public page language
+        </label>
+        <select
+          id="language"
+          value={language}
+          onChange={(e) => setLanguage(e.target.value as Language)}
+          className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-4 focus:ring-purple-500/20 focus:border-purple-500 transition-all text-gray-900 font-medium bg-white shadow-sm appearance-none cursor-pointer"
+          disabled={loading}
+        >
+          {LANGUAGE_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        <p className="mt-2 text-xs text-gray-500 flex items-center gap-2">
+          <span>💡</span>
+          The public link opens in this language by default.
+        </p>
+      </div>
 
         {/* Сообщения об ошибках/успехе */}
         {error && (
@@ -291,7 +317,7 @@ export default function CreateWishlistForm() {
         {success && (
           <div className="p-4 bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-200 text-green-800 rounded-xl text-sm font-semibold shadow-lg flex items-start gap-3">
             <span className="text-xl flex-shrink-0 animate-bounce">✅</span>
-            <span>Вишлист успешно создан! Перезагружаем страницу...</span>
+            <span>Wishlist created! Reloading...</span>
           </div>
         )}
 
@@ -304,12 +330,12 @@ export default function CreateWishlistForm() {
           {loading ? (
             <>
               <div className="w-5 h-5 border-4 border-white border-t-transparent rounded-full animate-spin"></div>
-              <span>Создаем ваш вишлист...</span>
+              <span>Creating your wishlist...</span>
             </>
           ) : (
             <>
               <span className="text-xl">🎉</span>
-              <span>Создать вишлист</span>
+              <span>Create wishlist</span>
             </>
           )}
         </button>

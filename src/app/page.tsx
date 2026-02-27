@@ -83,7 +83,7 @@ export default function Home() {
           <div className="mb-8 p-6 bg-white/80 backdrop-blur-sm rounded-3xl shadow-xl border-2 border-green-200">
             <p className="text-2xl font-bold text-green-600 flex items-center justify-center gap-2">
               <span className="animate-bounce">✅</span>
-              Вы вошли в систему!
+              You are signed in!
             </p>
           </div>
           <button 
@@ -91,7 +91,7 @@ export default function Home() {
             className="w-full bg-gradient-to-r from-indigo-600 via-purple-600 to-pink-600 hover:from-indigo-700 hover:via-purple-700 hover:to-pink-700 text-white py-5 px-8 rounded-2xl font-black text-xl shadow-2xl hover:shadow-purple-500/50 transition-all transform hover:scale-105 mb-4 flex items-center justify-center gap-3"
           >
             <span>🚀</span>
-            Открыть панель
+            Open dashboard
           </button>
           <button 
             onClick={async () => {
@@ -101,7 +101,7 @@ export default function Home() {
             className="w-full bg-gray-200 hover:bg-gray-300 text-gray-800 py-3 px-6 rounded-2xl font-bold shadow-lg transition-all transform hover:scale-105 flex items-center justify-center gap-2"
           >
             <span>🚪</span>
-            Выйти
+            Sign out
           </button>
         </div>
       </div>
@@ -132,7 +132,7 @@ export default function Home() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!email) {
-      setMessage('Введите email')
+      setMessage('Please enter an email')
       return
     }
     
@@ -222,7 +222,7 @@ export default function Home() {
             WishList MVP
           </h1>
           <p className="text-lg sm:text-xl text-gray-700 font-medium max-w-sm mx-auto">
-            Создавайте красивые вишлисты из Amazon и делитесь с друзьями! ✨
+            Build beautiful Amazon wishlists and share them with friends! ✨
           </p>
         </div>
         
@@ -240,7 +240,7 @@ export default function Home() {
             <div>
               <label className="block text-sm font-bold text-gray-700 mb-2 flex items-center gap-2">
                 <span>📧</span>
-                Email адрес
+                Email address
               </label>
               <input
                 type="email"
@@ -261,12 +261,12 @@ export default function Home() {
               {loading ? (
                 <>
                   <div className="w-6 h-6 border-4 border-white border-t-transparent rounded-full animate-spin"></div>
-                  <span>Отправка...</span>
+                  <span>Sending...</span>
                 </>
               ) : (
                 <>
                   <span className="text-2xl">✨</span>
-                  <span>Войти через Email</span>
+                  <span>Sign in with email</span>
                 </>
               )}
             </button>
@@ -275,7 +275,7 @@ export default function Home() {
           {/* Разделитель */}
           <div className="flex items-center gap-4 my-6">
             <div className="flex-1 h-px bg-gradient-to-r from-transparent via-gray-300 to-transparent"></div>
-            <span className="text-sm font-bold text-gray-500">ИЛИ</span>
+            <span className="text-sm font-bold text-gray-500">OR</span>
             <div className="flex-1 h-px bg-gradient-to-r from-transparent via-gray-300 to-transparent"></div>
           </div>
 
@@ -290,7 +290,7 @@ export default function Home() {
               <path fill="#4CAF50" d="M24 43c5.1 0 9.6-1.9 13-5.2l-6-4.9C29.9 33.9 27.1 35 24 35c-6 0-10.7-3.1-12.9-7.7l-6.6 5C7.9 36.9 15.9 43 24 43z"/>
               <path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-1.1 3.1-3.5 5.7-6.6 7.4l.1-.1 6 4.9C38.9 40.8 48 33.8 48 25c0-1.3-.1-2.6-.4-3.5z"/>
             </svg>
-            Войти через Google
+            Sign in with Google
           </button>
           
           {/* Сообщение */}
@@ -304,10 +304,10 @@ export default function Home() {
         {/* Инструкция */}
         <div className="mt-8 p-6 bg-white/60 backdrop-blur-sm rounded-2xl border border-gray-200 text-center">
           <p className="text-sm text-gray-700 font-medium leading-relaxed">
-            <span className="block mb-2 font-bold text-purple-700">📝 Как войти:</span>
-            1️⃣ Введите email → Нажмите "Войти"<br/>
-            2️⃣ Проверьте почту и найдите письмо<br/>
-            3️⃣ Кликните по ссылке → Готово! 🎉
+            <span className="block mb-2 font-bold text-purple-700">📝 How to sign in:</span>
+            1️⃣ Enter your email → Click "Sign in"<br/>
+            2️⃣ Check your inbox for the email<br/>
+            3️⃣ Click the link → Done! 🎉
           </p>
         </div>
       </div>

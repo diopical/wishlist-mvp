@@ -40,7 +40,7 @@ export async function POST(req: NextRequest) {
 
     // Парсим данные запроса
     const body = await req.json()
-    const { urls, title, event_type, event_date } = body
+    const { urls, title, event_type, event_date, language } = body
 
     if (!urls || !Array.isArray(urls) || urls.length === 0 || !title) {
       return NextResponse.json(
@@ -48,6 +48,8 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       )
     }
+
+    const normalizedLanguage = language === 'ru' ? 'ru' : 'en'
 
     console.log(`🔗 Creating wishlist: "${title}" from ${urls.length} URLs`)
 
@@ -267,6 +269,7 @@ export async function POST(req: NextRequest) {
         items, // JSON с товарами
         event_type: event_type || null,
         event_date: event_date || null,
+        language: normalizedLanguage,
       })
 
     if (insertError) {

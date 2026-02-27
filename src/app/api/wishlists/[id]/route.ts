@@ -76,7 +76,7 @@ export async function PUT(
     }
 
     const body = await req.json()
-    const { destination, items, require_name_for_reserve, custom_short_id } = body
+    const { destination, items, require_name_for_reserve, custom_short_id, event_type, language } = body
 
     // Подготавливаем объект для обновления
     const updateData: any = {}
@@ -93,6 +93,12 @@ export async function PUT(
     }
     if (custom_short_id !== undefined) {
       updateData.custom_short_id = custom_short_id
+    }
+    if (event_type !== undefined) {
+      updateData.event_type = event_type
+    }
+    if (language !== undefined) {
+      updateData.language = language
     }
 
     // Проверяем, что есть что обновлять

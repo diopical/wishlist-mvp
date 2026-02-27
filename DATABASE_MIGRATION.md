@@ -28,6 +28,17 @@ ADD COLUMN IF NOT EXISTS custom_short_id VARCHAR(20) UNIQUE;
 CREATE INDEX IF NOT EXISTS idx_wishes_custom_short_id ON wishes(custom_short_id);
 ```
 
+### 3. Add `language` column to `wishes` table
+
+Run this query:
+
+```sql
+ALTER TABLE wishes
+ADD COLUMN IF NOT EXISTS language VARCHAR(2) NOT NULL DEFAULT 'en';
+
+CREATE INDEX IF NOT EXISTS idx_wishes_language ON wishes(language);
+```
+
 ## What These Changes Enable
 
 - **username**: Allows users to set a custom username for public wishlist URLs
@@ -39,6 +50,11 @@ CREATE INDEX IF NOT EXISTS idx_wishes_custom_short_id ON wishes(custom_short_id)
   - Optional: If not set, uses the default short_id
   - Creates URLs like: `/w/{username}/my-wedding`
   - Must be 3-20 characters, alphanumeric with hyphens and underscores
+
+- **language**: Stores the creator's preferred public wishlist language
+  - Default: `en`
+  - Public links open in this language by default
+  - Viewers can still switch languages on the public page
 
 ## New API Endpoints
 
